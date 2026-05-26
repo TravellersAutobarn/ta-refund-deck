@@ -58,8 +58,8 @@ COL = {
     "pickup_branch":    11,
     "refund_category":  12,
     "amount":           13,
-    "details":          14,
-    "notes":            15,
+    "details":          15,
+    "notes":            16,
 }
 
 
