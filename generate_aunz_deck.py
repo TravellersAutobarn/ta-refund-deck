@@ -40,7 +40,7 @@ NZ_BRANCHES = {
 
 ALL_BRANCHES = {**AU_BRANCHES, **NZ_BRANCHES}
 
-REFUND_CATEGORIES = ["DOR-GW", "Camp Gear-Prep", "Mechanical", "Kitchen-Internal"]
+REFUND_CATEGORIES = ["DOR - GW", "Camp Gear - Prep", "Mechanical", "Kitchen - Internal"]
 
 # Sheet column mapping (0-indexed, matches the column order described)
 COL = {
@@ -589,11 +589,11 @@ pres.title  = `Travellers Autobarn — AU/NZ Refund Awareness ${{DATE_LABEL}}`;
   const categories = Object.keys(AU_CAT_TOTALS);
   const branchLabels = AU_BRANCHES.map(b => b.code);
 
-  const chartData = categories.map((cat, ci) => ({{
+  const chartData = categories.map((cat, ci) => ({
     name:   cat,
-    labels: branchLabels,
+    labels: AU_BRANCHES.map(b => b.code),
     values: AU_BRANCHES.map(b => b.by_category[cat] || 0)
-  }}));
+}));
 
   slide.addChart(pres.charts.BAR, chartData, {{
     x: 0.4, y: 0.9, w: 6.2, h: 3.5,
