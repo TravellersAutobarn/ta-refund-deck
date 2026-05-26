@@ -643,7 +643,13 @@ pres.title  = `Travellers Autobarn — AU/NZ Refund Awareness ${{DATE_LABEL}}`;
       fontSize:9, color:'94A3B8', align:'center', margin:0
     }});
   }});
-
+// Branch legend table
+  const branchLegend = ['1=BNE', '2=CNS', '3=MEL', '4=SYD', '5=PER', '6=DAR'];
+  slide.addText(branchLegend.join('   '), {{
+    x: 0.4, y: 4.42, w: 6.2, h: 0.22,
+    fontSize: 9, color: MID_GREY, align: 'center', italic: true
+  }});
+  // Narrative sentence
   // Narrative sentence
   slide.addShape(pres.shapes.RECTANGLE, {{
     x:0.4, y:4.55, w:9.2, h:0.75,
