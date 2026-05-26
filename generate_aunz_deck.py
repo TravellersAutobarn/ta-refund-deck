@@ -91,7 +91,7 @@ def parse_date(val):
     """Parse date string to date object (handles multiple formats)."""
     if not val:
         return None
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y"):
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%d/%b/%Y"):
         try:
             return datetime.strptime(str(val).strip(), fmt).date()
         except ValueError:
