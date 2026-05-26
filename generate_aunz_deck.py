@@ -599,6 +599,8 @@ pres.title  = `Travellers Autobarn — AU/NZ Refund Awareness ${{DATE_LABEL}}`;
     x: 0.4, y: 0.9, w: 6.2, h: 3.5,
     barDir:    'col',
     barGrouping: 'stacked',
+    catAxisLabelFontSize: 10,
+    catAxisLabelColor: MID_GREY,
     chartColors: catColors,
     showLegend: true,
     legendPos:  'b',
