@@ -589,11 +589,11 @@ pres.title  = `Travellers Autobarn — AU/NZ Refund Awareness ${{DATE_LABEL}}`;
   const categories = Object.keys(AU_CAT_TOTALS);
   const branchLabels = AU_BRANCHES.map(b => b.code);
 
-  const chartData = categories.map((cat, ci) => ({
+  const chartData = categories.map((cat, ci) => ({{
     name:   cat,
     labels: AU_BRANCHES.map(b => b.code),
     values: AU_BRANCHES.map(b => b.by_category[cat] || 0)
-}));
+}}));
 
   slide.addChart(pres.charts.BAR, chartData, {{
     x: 0.4, y: 0.9, w: 6.2, h: 3.5,
