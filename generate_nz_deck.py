@@ -464,13 +464,11 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
   }});
 }})();
 
-// ════════════════════════════════════════════════════════════════════════════
-// SLIDE 3 — Where the Money Went (category breakdown + callouts)
+// SLIDE 3 — Where the Money Went (NZ)
 // ════════════════════════════════════════════════════════════════════════════
 (function() {{
   const slide = pres.addSlide();
   slide.background = {{ color: WHITE }};
-
   slide.addShape(pres.shapes.RECTANGLE, {{ x:0, y:0, w:10, h:0.08, fill:{{ color: NAVY }}, line:{{ color: NAVY }} }});
   slide.addText('WHERE THE MONEY WENT', {{
     x:0.4, y:0.15, w:9, h:0.4,
@@ -480,13 +478,107 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
     x:0.4, y:0.52, w:9, h:0.28,
     fontSize:11, color: MID_GREY, italic:true
   }});
-
   const catColors = ['E63946', 'F4A261', '2A9D8F', '457B9D'];
-  const chartData = Object.keys(NZ_CAT_TOTALS).map((cat, ci) => ({{
-    name:   cat,
-    labels: NZ_BRANCHES.map(b => b.code),
-    values: NZ_BRANCHES.map(b => b.by_category[cat] || 0)
-  }}));
+  const ALL_CATS = ['DOR - GW', 'Camp Gear - Prep', 'Mechanical', 'Kitchen - Internal'];
+
+  const barAreaX = 0.4;
+  const barAreaY = 0.9;
+  const barAreaH = 2.7;
+  const barW = 2.2;
+  const barGap = 1.0;
+  const maxVal = Math.max(...NZ_BRANCHES.map(b =>
+    ALL_CATS.reduce((sum, cat) => sum + (b.by_category[cat] || 0), 0)
+  ), 1);
+
+  NZ_BRANCHES.forEach((b, bi) => {{
+    const barX = barAreaX + bi * (barW + barGap);
+    const branchTotal = ALL_CATS.reduce((sum, cat) => sum + (b.by_category[cat] || 0), 0);
+    let stackY = barAreaY + barAreaH;
+
+    ALL_CATS.forEach((cat, ci) => {{
+      const val = b.by_category[cat] || 0;
+      if (val === 0) return;
+      const segH = (val / maxVal) * barAreaH;
+      stackY -= segH;
+      slide.addShape(pres.shapes.RECTANGLE, {{
+        x: barX, y: stackY, w: barW, h: segH,
+        fill: {{ color: catColors[ci] }}, line: {{ color: catColors[ci] }}
+      }});
+      if (segH > 0.2) {{
+        slide.addText(`NZ$${{Math.round(val)}}`, {{
+          x: barX, y: stackY + segH/2 - 0.1, w: barW, h: 0.2,
+          fontSize: 9, color: WHITE, align: 'center', bold: true, margin: 0
+        }});
+      }}
+    }});
+
+    slide.addText(b.code, {{
+      x: barX, y: barAreaY + barAreaH + 0.08, w: barW, h: 0.25,
+      fontSize: 12, color: DARK_GREY, align: 'center', bold: true
+    }});
+    slide.addText(b.name, {{
+      x: barX, y: barAreaY + barAreaH + 0.3, w: barW, h: 0.22,
+      fontSize: 9, color: MID_GREY, align: 'center', italic: true
+    }});
+    slide.addText(fmtNZD(branchTotal), {{
+      x: barX, y: barAreaY + barAreaH + 0.5, w: barW, h: 0.22,
+      fontSize: 9, color: MID_GREY, align: 'center'
+    }});
+  }});
+
+  // Legend
+  ALL_CATS.forEach((cat, ci) => {{
+    const lx = barAreaX + ci * 1.55;
+    slide.addShape(pres.shapes.RECTANGLE, {{
+      x: lx, y: 4.18, w: 0.15, h: 0.15,
+      fill: {{ color: catColors[ci] }}, line: {{ color: catColors[ci] }}
+    }});
+    slide.addText(cat, {{
+      x: lx + 0.2, y: 4.16, w: 1.3, h: 0.2,
+      fontSize: 8, color: MID_GREY
+    }});
+  }});
+
+  // Callouts
+  const callouts = [
+    {{ label:'Total NZ Refunds', value: fmtNZD(NZ_TOTAL) }},
+    {{ label:'Total Claims',     value: NZ_COUNT.toString() }},
+    {{ label:'Avg Claim Value',  value: fmtNZD(NZ_AVG) }},
+    {{ label:'Top Category',
+       value: (function() {{
+         let top = '', topV = 0;
+         for (const [k,v] of Object.entries(NZ_CAT_TOTALS)) {{ if(v>topV){{ top=k; topV=v; }} }}
+         return top.split(' - ')[0] || top;
+       }})()
+    }},
+  ];
+  callouts.forEach((c, i) => {{
+    const y = 0.9 + i * 0.88;
+    slide.addShape(pres.shapes.RECTANGLE, {{
+      x:6.9, y, w:2.8, h:0.8,
+      fill:{{ color: NAVY }}, line:{{ color:'334155' }},
+      shadow: makeShadow()
+    }});
+    slide.addText(c.value, {{
+      x:6.95, y: y+0.04, w:2.7, h:0.44,
+      fontSize:18, bold:true, color:WHITE, align:'center', margin:0
+    }});
+    slide.addText(c.label, {{
+      x:6.95, y: y+0.5, w:2.7, h:0.26,
+      fontSize:9, color:'94A3B8', align:'center', margin:0
+    }});
+  }});
+
+  // Narrative banner
+  slide.addShape(pres.shapes.RECTANGLE, {{
+    x:0.4, y:4.5, w:9.2, h:0.75,
+    fill:{{ color:'FFF7ED' }}, line:{{ color: ORANGE, pt:1 }}
+  }});
+  slide.addText(N.nz_where_money_went, {{
+    x:0.55, y:4.55, w:9.0, h:0.65,
+    fontSize:11, color:DARK_GREY, italic:true, wrap:true
+  }});
+}})();
 
   slide.addChart(pres.charts.BAR, chartData, {{
     x:0.4, y:0.9, w:6.2, h:3.5,
