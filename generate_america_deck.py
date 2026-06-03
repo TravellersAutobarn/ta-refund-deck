@@ -510,13 +510,11 @@ pres.title  = `Travellers Autobarn — America Refund Awareness ${{DATE_LABEL}}`
   }});
 }})();
 
-// ════════════════════════════════════════════════════════════════════════════
 // SLIDE 3 — Where the Money Went (US)
 // ════════════════════════════════════════════════════════════════════════════
 (function() {{
   const slide = pres.addSlide();
   slide.background = {{ color: WHITE }};
-
   slide.addShape(pres.shapes.RECTANGLE, {{ x:0, y:0, w:10, h:0.08, fill:{{ color: NAVY }}, line:{{ color: NAVY }} }});
   slide.addText('WHERE THE MONEY WENT', {{
     x:0.4, y:0.15, w:9, h:0.4,
@@ -528,28 +526,61 @@ pres.title  = `Travellers Autobarn — America Refund Awareness ${{DATE_LABEL}}`
   }});
   const catColors = ['E63946', 'F4A261', '2A9D8F', '457B9D'];
   const ALL_CATS = ['DOR - GW', 'Camp Gear - Prep', 'Mechanical', 'Kitchen - Internal'];
-  const chartData = ALL_CATS.map(cat => ({{
-    name:   cat,
-    labels: US_BRANCHES.map(b => b.code),
-    values: US_BRANCHES.map(b => b.by_category[cat] || 0)
-  }})).filter(series => series.values.some(v => v > 0));
 
-  slide.addChart(pres.charts.BAR, chartData, {{
-    x:0.4, y:0.9, w:6.2, h:3.5,
-    barDir: 'col',
-    barGrouping: 'stacked',
-    catAxisLabelFontSize: 11,
-    chartColors: catColors,
-    showLegend: true,
-    legendPos: 'b',
-    legendFontSize: 9,
-    chartArea: {{ fill: {{ color: WHITE }} }},
-    valAxisLabelColor: MID_GREY,
-    catAxisLabelColor: MID_GREY,
-    valGridLine: {{ color: 'E2E8F0', size: 0.5 }},
-    catGridLine: {{ style: 'none' }},
-    showValue: true,
-    dataLabelFontSize: 9,
+  // Manual stacked bar chart using shapes
+  const barAreaX = 0.4;
+  const barAreaY = 0.9;
+  const barAreaH = 3.5;
+  const barW = 1.5;
+  const barGap = 0.55;
+  const maxVal = Math.max(...US_BRANCHES.map(b =>
+    ALL_CATS.reduce((sum, cat) => sum + (b.by_category[cat] || 0), 0)
+  ), 1);
+
+  US_BRANCHES.forEach((b, bi) => {{
+    const barX = barAreaX + bi * (barW + barGap);
+    const branchTotal = ALL_CATS.reduce((sum, cat) => sum + (b.by_category[cat] || 0), 0);
+    let stackY = barAreaY + barAreaH;
+
+    ALL_CATS.forEach((cat, ci) => {{
+      const val = b.by_category[cat] || 0;
+      if (val === 0) return;
+      const segH = (val / maxVal) * barAreaH;
+      stackY -= segH;
+      slide.addShape(pres.shapes.RECTANGLE, {{
+        x: barX, y: stackY, w: barW, h: segH,
+        fill: {{ color: catColors[ci] }}, line: {{ color: catColors[ci] }}
+      }});
+      if (segH > 0.2) {{
+        slide.addText(`$${{Math.round(val)}}`, {{
+          x: barX, y: stackY + segH/2 - 0.1, w: barW, h: 0.2,
+          fontSize: 8, color: WHITE, align: 'center', bold: true, margin: 0
+        }});
+      }}
+    }});
+
+    // Branch label below bar
+    slide.addText(b.code, {{
+      x: barX, y: barAreaY + barAreaH + 0.05, w: barW, h: 0.25,
+      fontSize: 11, color: DARK_GREY, align: 'center', bold: true
+    }});
+    slide.addText(fmtUSD(branchTotal), {{
+      x: barX, y: barAreaY + barAreaH + 0.28, w: barW, h: 0.22,
+      fontSize: 9, color: MID_GREY, align: 'center'
+    }});
+  }});
+
+  // Legend
+  ALL_CATS.forEach((cat, ci) => {{
+    const lx = barAreaX + ci * 1.55;
+    slide.addShape(pres.shapes.RECTANGLE, {{
+      x: lx, y: 4.52, w: 0.15, h: 0.15,
+      fill: {{ color: catColors[ci] }}, line: {{ color: catColors[ci] }}
+    }});
+    slide.addText(cat, {{
+      x: lx + 0.2, y: 4.5, w: 1.3, h: 0.2,
+      fontSize: 8, color: MID_GREY
+    }});
   }});
 
   // Callouts — US has preventable stat instead of avg
