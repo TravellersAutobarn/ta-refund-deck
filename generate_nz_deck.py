@@ -164,7 +164,6 @@ def calculate_stats(rows):
         cat = str(row[COL["refund_category"]]).strip()
         category_totals[cat] += parse_amount(row[COL["amount"]])
 
-    # Equipment gap: biggest DOR/Gear claim per branch
     equipment_gaps = []
     for b in branches:
         dor_claims = [c for c in b["claims"] if "DOR" in c["category"].upper() or "GEAR" in c["category"].upper()]
@@ -253,7 +252,6 @@ def build_pptx_script(stats, narratives, date_label, output_path):
 'use strict';
 const pptxgen = require('pptxgenjs');
 
-// ─── Embedded data ─────────────────────────────────────────────────────────
 const DATE_LABEL    = {json.dumps(date_label)};
 const NZ_TOTAL      = {stats["grand_total"]};
 const NZ_COUNT      = {stats["grand_count"]};
@@ -263,7 +261,6 @@ const NZ_BRANCHES   = {branches_js};
 const NZ_EQUIP_GAPS = {json.dumps(stats["equipment_gaps"])};
 const N             = {narratives_js};
 
-// ─── Helpers ──────────────────────────────────────────────────────────────
 const fmtNZD = v => 'NZ$' + Number(v).toLocaleString('en-NZ', {{minimumFractionDigits:0, maximumFractionDigits:0}});
 const fmtPct = v => v.toFixed(1) + '%';
 
@@ -276,7 +273,6 @@ const DARK_GREY  = '1E293B';
 
 const makeShadow = () => ({{ type: 'outer', blur: 8, offset: 2, angle: 135, color: '000000', opacity: 0.12 }});
 
-// ─── Presentation setup ───────────────────────────────────────────────────
 const pres = new pptxgen();
 pres.layout = 'LAYOUT_16x9';
 pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
@@ -287,9 +283,7 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
 (function() {{
   const slide = pres.addSlide();
   slide.background = {{ color: NAVY }};
-
   slide.addShape(pres.shapes.RECTANGLE, {{ x:0, y:0, w:10, h:0.08, fill:{{ color: ORANGE }}, line:{{ color: ORANGE }} }});
-
   slide.addText('TRAVELLERS AUTOBARN', {{
     x:0.5, y:0.2, w:6, h:0.4,
     fontSize:11, bold:true, color:'94A3B8', charSpacing:3, align:'left'
@@ -306,8 +300,6 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
     x:0.5, y:1.75, w:9, h:0.35,
     fontSize:13, color:'64748B', align:'left'
   }});
-
-  // Big stat callouts
   const stats = [
     {{ label:'Total Refunds', value: fmtNZD(NZ_TOTAL) }},
     {{ label:'Total Claims',  value: NZ_COUNT.toString() }},
@@ -329,8 +321,6 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
       fontSize:10, color:'64748B', align:'center', margin:0
     }});
   }});
-
-  // Branch dots
   slide.addText('Branches covered:', {{
     x:0.5, y:3.62, w:5, h:0.28,
     fontSize:10, color:'64748B', align:'left'
@@ -347,8 +337,6 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
       fontSize:11, color:WHITE, align:'left'
     }});
   }});
-
-  // Key insight box
   slide.addShape(pres.shapes.RECTANGLE, {{
     x:6.3, y:3.5, w:3.4, h:1.75,
     fill:{{ color:'7C2D12' }}, line:{{ color: ORANGE, pt:1.5 }},
@@ -362,7 +350,6 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
     x:6.4, y:3.85, w:3.2, h:1.3,
     fontSize:12, color:WHITE, align:'left', wrap:true
   }});
-
   slide.addShape(pres.shapes.LINE, {{
     x:0.5, y:5.4, w:9, h:0, line:{{ color:'1E293B', pt:1 }}
   }});
@@ -373,12 +360,11 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
 }})();
 
 // ════════════════════════════════════════════════════════════════════════════
-// SLIDE 2 — Refunds by NZ Branch (2 cards — full width)
+// SLIDE 2 — Refunds by NZ Branch
 // ════════════════════════════════════════════════════════════════════════════
 (function() {{
   const slide = pres.addSlide();
   slide.background = {{ color: LIGHT_GREY }};
-
   slide.addShape(pres.shapes.RECTANGLE, {{ x:0, y:0, w:10, h:0.08, fill:{{ color: NAVY }}, line:{{ color: NAVY }} }});
   slide.addText('REFUNDS BY BRANCH', {{
     x:0.4, y:0.15, w:9, h:0.4,
@@ -388,15 +374,11 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
     x:0.4, y:0.52, w:9, h:0.3,
     fontSize:11, color: MID_GREY, italic:true
   }});
-
-  // 2 wide cards side by side
   const cW = 4.55, cH = 2.8;
   const startX = 0.4, startY = 1.0, gap = 0.1;
-
   NZ_BRANCHES.forEach((b, i) => {{
     const x   = startX + i * (cW + gap);
     const ins = N.nz_branch_cards[b.code] || '';
-
     slide.addShape(pres.shapes.RECTANGLE, {{
       x, y:startY, w:cW, h:cH,
       fill:{{ color: WHITE }}, line:{{ color:'E2E8F0', pt:1 }},
@@ -406,7 +388,6 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
       x, y:startY, w:0.07, h:cH,
       fill:{{ color: b.color }}, line:{{ color: b.color }}
     }});
-
     slide.addText(b.code, {{
       x: x+0.18, y: startY+0.12, w:1.4, h:0.48,
       fontSize:30, bold:true, color: b.color, margin:0
@@ -415,7 +396,6 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
       x: x+0.18, y: startY+0.58, w: cW-0.3, h:0.26,
       fontSize:13, color: MID_GREY, italic:true, margin:0
     }});
-
     slide.addText(fmtNZD(b.total), {{
       x: x+0.18, y: startY+0.92, w: cW-0.3, h:0.52,
       fontSize:32, bold:true, color: DARK_GREY, margin:0
@@ -424,8 +404,6 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
       x: x+0.18, y: startY+1.46, w:2.0, h:0.3,
       fontSize:14, color: MID_GREY, margin:0
     }});
-
-    // % badge
     slide.addShape(pres.shapes.RECTANGLE, {{
       x: x+cW-1.35, y: startY+1.44, w:1.2, h:0.32,
       fill:{{ color: b.color }}, line:{{ color: b.color }}
@@ -434,8 +412,6 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
       x: x+cW-1.35, y: startY+1.44, w:1.2, h:0.32,
       fontSize:13, bold:true, color: WHITE, align:'center', margin:0
     }});
-
-    // Category mini breakdown
     const cats = Object.entries(b.by_category).filter(([,v]) => v > 0);
     cats.forEach(([cat, val], ci) => {{
       const cy = startY + 1.9 + ci * 0.22;
@@ -445,15 +421,11 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
         fontSize:9, color: MID_GREY, margin:0
       }});
     }});
-
-    // Italic insight
     slide.addText(ins, {{
       x: x+0.15, y: startY+cH-0.45, w: cW-0.3, h:0.38,
       fontSize:9.5, color: MID_GREY, italic:true, wrap:true, margin:0
     }});
   }});
-
-  // NZ vs AU comparison note
   slide.addShape(pres.shapes.RECTANGLE, {{
     x:0.4, y:4.0, w:9.2, h:0.55,
     fill:{{ color:'F0F9FF' }}, line:{{ color:'BAE6FD', pt:1 }}
@@ -464,6 +436,7 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
   }});
 }})();
 
+// ════════════════════════════════════════════════════════════════════════════
 // SLIDE 3 — Where the Money Went (NZ)
 // ════════════════════════════════════════════════════════════════════════════
 (function() {{
@@ -480,7 +453,6 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
   }});
   const catColors = ['E63946', 'F4A261', '2A9D8F', '457B9D'];
   const ALL_CATS = ['DOR - GW', 'Camp Gear - Prep', 'Mechanical', 'Kitchen - Internal'];
-
   const barAreaX = 0.4;
   const barAreaY = 0.9;
   const barAreaH = 2.7;
@@ -489,12 +461,10 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
   const maxVal = Math.max(...NZ_BRANCHES.map(b =>
     ALL_CATS.reduce((sum, cat) => sum + (b.by_category[cat] || 0), 0)
   ), 1);
-
   NZ_BRANCHES.forEach((b, bi) => {{
     const barX = barAreaX + bi * (barW + barGap);
     const branchTotal = ALL_CATS.reduce((sum, cat) => sum + (b.by_category[cat] || 0), 0);
     let stackY = barAreaY + barAreaH;
-
     ALL_CATS.forEach((cat, ci) => {{
       const val = b.by_category[cat] || 0;
       if (val === 0) return;
@@ -505,13 +475,12 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
         fill: {{ color: catColors[ci] }}, line: {{ color: catColors[ci] }}
       }});
       if (segH > 0.2) {{
-        slide.addText(`NZ$${{Math.round(val)}}`, {{
+        slide.addText('NZ$' + Math.round(val), {{
           x: barX, y: stackY + segH/2 - 0.1, w: barW, h: 0.2,
           fontSize: 9, color: WHITE, align: 'center', bold: true, margin: 0
         }});
       }}
     }});
-
     slide.addText(b.code, {{
       x: barX, y: barAreaY + barAreaH + 0.08, w: barW, h: 0.25,
       fontSize: 12, color: DARK_GREY, align: 'center', bold: true
@@ -525,8 +494,6 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
       fontSize: 9, color: MID_GREY, align: 'center'
     }});
   }});
-
-  // Legend
   ALL_CATS.forEach((cat, ci) => {{
     const lx = barAreaX + ci * 1.55;
     slide.addShape(pres.shapes.RECTANGLE, {{
@@ -538,8 +505,6 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
       fontSize: 8, color: MID_GREY
     }});
   }});
-
-  // Callouts
   const callouts = [
     {{ label:'Total NZ Refunds', value: fmtNZD(NZ_TOTAL) }},
     {{ label:'Total Claims',     value: NZ_COUNT.toString() }},
@@ -568,8 +533,6 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
       fontSize:9, color:'94A3B8', align:'center', margin:0
     }});
   }});
-
-  // Narrative banner
   slide.addShape(pres.shapes.RECTANGLE, {{
     x:0.4, y:4.5, w:9.2, h:0.75,
     fill:{{ color:'FFF7ED' }}, line:{{ color: ORANGE, pt:1 }}
@@ -580,73 +543,12 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
   }});
 }})();
 
-  slide.addChart(pres.charts.BAR, chartData, {{
-    x:0.4, y:0.9, w:6.2, h:3.5,
-    barDir: 'col',
-    barGrouping: 'stacked',
-    catAxisLabelFontSize: 11,
-    chartColors: catColors,
-    showLegend: true,
-    legendPos: 'b',
-    legendFontSize: 9,
-    chartArea: {{ fill: {{ color: WHITE }} }},
-    valAxisLabelColor: MID_GREY,
-    catAxisLabelColor: MID_GREY,
-    valGridLine: {{ color: 'E2E8F0', size: 0.5 }},
-    catGridLine: {{ style: 'none' }},
-    showValue: true,
-    dataLabelFontSize: 9,
-  }});
-
-  // Callout stats
-  const callouts = [
-    {{ label:'Total NZ Refunds', value: fmtNZD(NZ_TOTAL) }},
-    {{ label:'Total Claims',     value: NZ_COUNT.toString() }},
-    {{ label:'Avg Claim Value',  value: fmtNZD(NZ_AVG) }},
-    {{ label:'Top Category',
-       value: (function() {{
-         let top = '', topV = 0;
-         for (const [k,v] of Object.entries(NZ_CAT_TOTALS)) {{ if(v>topV){{ top=k; topV=v; }} }}
-         return top.split(' - ')[0] || top;
-       }})()
-    }},
-  ];
-
-  callouts.forEach((c, i) => {{
-    const y = 0.9 + i * 0.88;
-    slide.addShape(pres.shapes.RECTANGLE, {{
-      x:6.9, y, w:2.8, h:0.8,
-      fill:{{ color: NAVY }}, line:{{ color:'334155' }},
-      shadow: makeShadow()
-    }});
-    slide.addText(c.value, {{
-      x:6.95, y: y+0.04, w:2.7, h:0.44,
-      fontSize:18, bold:true, color:WHITE, align:'center', margin:0
-    }});
-    slide.addText(c.label, {{
-      x:6.95, y: y+0.5, w:2.7, h:0.26,
-      fontSize:9, color:'94A3B8', align:'center', margin:0
-    }});
-  }});
-
-  // Narrative banner
-  slide.addShape(pres.shapes.RECTANGLE, {{
-    x:0.4, y:4.55, w:9.2, h:0.75,
-    fill:{{ color:'FFF7ED' }}, line:{{ color: ORANGE, pt:1 }}
-  }});
-  slide.addText(N.nz_where_money_went, {{
-    x:0.55, y:4.6, w:9.0, h:0.65,
-    fontSize:11, color:DARK_GREY, italic:true, wrap:true
-  }});
-}})();
-
 // ════════════════════════════════════════════════════════════════════════════
 // SLIDE 4 — Equipment Gap (NZ)
 // ════════════════════════════════════════════════════════════════════════════
 (function() {{
   const slide = pres.addSlide();
   slide.background = {{ color: LIGHT_GREY }};
-
   slide.addShape(pres.shapes.RECTANGLE, {{ x:0, y:0, w:10, h:0.08, fill:{{ color: NAVY }}, line:{{ color: NAVY }} }});
   slide.addText('EQUIPMENT GAP', {{
     x:0.4, y:0.15, w:9, h:0.4,
@@ -656,32 +558,24 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
     x:0.4, y:0.52, w:9, h:0.28,
     fontSize:11, color: MID_GREY, italic:true
   }});
-
   const gaps = NZ_EQUIP_GAPS.slice(0, 2);
   while (gaps.length < 2) gaps.push(null);
-
-  // 2 wide cards
   const cW = 4.55, cH = 3.2;
   const startX = 0.4, startY = 0.93;
-
   gaps.forEach((g, i) => {{
     const x = startX + i * (cW + 0.1);
-
     slide.addShape(pres.shapes.RECTANGLE, {{
       x, y:startY, w:cW, h:cH,
       fill:{{ color: WHITE }}, line:{{ color:'E2E8F0' }},
       shadow: makeShadow()
     }});
-
     if (!g) {{
-      const bc = NZ_EQUIP_GAPS.length === 0 ? NZ_BRANCHES[i] : null;
       slide.addText('No equipment claims this period', {{
         x: x+0.1, y: startY+1.3, w: cW-0.2, h:0.5,
         fontSize:11, color: MID_GREY, italic:true, align:'center'
       }});
       return;
     }}
-
     slide.addShape(pres.shapes.RECTANGLE, {{
       x, y:startY, w:cW, h:0.08,
       fill:{{ color: g.color }}, line:{{ color: g.color }}
@@ -712,8 +606,6 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
       fontSize:9.5, color: MID_GREY, wrap:true, margin:0
     }});
   }});
-
-  // Insight banner
   slide.addShape(pres.shapes.RECTANGLE, {{
     x:0.4, y:4.3, w:9.2, h:0.72,
     fill:{{ color:'1E293B' }}, line:{{ color: NAVY }}
@@ -725,19 +617,16 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
 }})();
 
 // ════════════════════════════════════════════════════════════════════════════
-// SLIDES 5–6 — NZ Branch Detail (one per branch: AUK, CHC)
+// SLIDES 5–6 — NZ Branch Detail
 // ════════════════════════════════════════════════════════════════════════════
 NZ_BRANCHES.forEach(branch => {{
   const slide = pres.addSlide();
   slide.background = {{ color: WHITE }};
-
-  // Left sidebar
   const sideW = 2.6;
   slide.addShape(pres.shapes.RECTANGLE, {{
     x:0, y:0, w:sideW, h:5.625,
     fill:{{ color: branch.color }}, line:{{ color: branch.color }}
   }});
-
   slide.addText(branch.code, {{
     x:0.1, y:0.25, w:sideW-0.15, h:0.7,
     fontSize:38, bold:true, color:WHITE, align:'left', charSpacing:1
@@ -750,7 +639,6 @@ NZ_BRANCHES.forEach(branch => {{
     x:0.15, y:1.3, w:sideW-0.3, h:0,
     line:{{ color:'FFFFFF', pt:1, transparency: 50 }}
   }});
-
   slide.addText('TOTAL REFUNDS', {{
     x:0.1, y:1.45, w:sideW-0.15, h:0.22,
     fontSize:8, color:'FFFFFF', charSpacing:2
@@ -767,13 +655,10 @@ NZ_BRANCHES.forEach(branch => {{
     x:0.15, y:2.55, w:sideW-0.3, h:0,
     line:{{ color:'FFFFFF', pt:1, transparency: 50 }}
   }});
-
-  // Sidebar category bars
   const catLabels = Object.keys(branch.by_category);
   const catValues = catLabels.map(k => branch.by_category[k] || 0);
   const maxCatVal = Math.max(...catValues, 1);
   const barMaxW   = sideW - 0.35;
-
   catLabels.forEach((cat, ci) => {{
     const barY   = 2.75 + ci * 0.6;
     const barPct = catValues[ci] / maxCatVal;
@@ -796,8 +681,6 @@ NZ_BRANCHES.forEach(branch => {{
       fontSize:8.5, bold:true, color:WHITE
     }});
   }});
-
-  // Sidebar narrative
   const sideNarrative = N.nz_branch_detail[branch.code] || '';
   slide.addShape(pres.shapes.RECTANGLE, {{
     x:0.08, y:5.1, w:sideW-0.16, h:0.42,
@@ -807,11 +690,8 @@ NZ_BRANCHES.forEach(branch => {{
     x:0.12, y:5.1, w:sideW-0.22, h:0.42,
     fontSize:8, color:WHITE, italic:true, wrap:true
   }});
-
-  // Right panel — individual claims
   const rightX = sideW + 0.25;
   const rightW = 10 - rightX - 0.25;
-
   slide.addText('INDIVIDUAL CLAIMS', {{
     x: rightX, y:0.18, w: rightW, h:0.3,
     fontSize:13, bold:true, color: NAVY, charSpacing:1
@@ -820,14 +700,11 @@ NZ_BRANCHES.forEach(branch => {{
     x: rightX, y:0.52, w: rightW, h:0,
     line:{{ color:'E2E8F0', pt:1 }}
   }});
-
   const displayClaims = branch.claims.slice(0, 5);
   const claimH = 0.92;
   const claimStartY = 0.6;
-
   displayClaims.forEach((claim, ci) => {{
     const cy = claimStartY + ci * (claimH + 0.08);
-
     slide.addShape(pres.shapes.RECTANGLE, {{
       x: rightX, y: cy, w: rightW, h: claimH,
       fill:{{ color: LIGHT_GREY }}, line:{{ color:'E2E8F0', pt:0.75 }}
@@ -836,7 +713,6 @@ NZ_BRANCHES.forEach(branch => {{
       x: rightX, y: cy, w:0.07, h: claimH,
       fill:{{ color: branch.color }}, line:{{ color: branch.color }}
     }});
-
     const catShort = (claim.category || 'Other').substring(0, 18);
     slide.addShape(pres.shapes.RECTANGLE, {{
       x: rightX + 0.12, y: cy+0.1, w:1.5, h:0.22,
@@ -850,20 +726,17 @@ NZ_BRANCHES.forEach(branch => {{
       x: rightX + rightW - 1.3, y: cy+0.08, w:1.25, h:0.28,
       fontSize:16, bold:true, color: DARK_GREY, align:'right', margin:0
     }});
-
     const nameLine = `${{claim.last_name || ''}}${{claim.rego ? ' · ' + claim.rego : ''}}${{claim.res_num ? ' · Res #' + claim.res_num : ''}}`;
     slide.addText(nameLine, {{
       x: rightX + 0.12, y: cy+0.36, w: rightW-0.2, h:0.22,
       fontSize:9, color: MID_GREY, margin:0
     }});
-
     const details = (claim.details || '').substring(0, 120);
     slide.addText(details, {{
       x: rightX + 0.12, y: cy+0.58, w: rightW-0.2, h:0.28,
       fontSize:8.5, color: DARK_GREY, wrap:true, margin:0
     }});
   }});
-
   if (branch.claims.length > 5) {{
     slide.addText(`+ ${{branch.claims.length - 5}} more claim${{branch.claims.length - 5 !== 1 ? 's' : ''}} not shown`, {{
       x: rightX, y: claimStartY + 5 * (claimH + 0.08), w: rightW, h:0.25,
@@ -872,7 +745,6 @@ NZ_BRANCHES.forEach(branch => {{
   }}
 }});
 
-// ─── Write file ──────────────────────────────────────────────────────────────
 const outputPath = {json.dumps(output_path)};
 pres.writeFile({{ fileName: outputPath }})
   .then(() => {{ console.log('SUCCESS:' + outputPath); }})
