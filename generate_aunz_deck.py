@@ -584,49 +584,77 @@ pres.title  = `Travellers Autobarn — AU/NZ Refund Awareness ${{DATE_LABEL}}`;
     fontSize:11, color: MID_GREY, italic:true
   }});
 
-  // Stacked bar chart — one series per refund category
   const catColors = ['E63946', 'F4A261', '2A9D8F', '457B9D'];
-  const categories = Object.keys(AU_CAT_TOTALS);
-  const branchLabels = AU_BRANCHES.map(b => b.code);
+  const ALL_CATS = ['DOR - GW', 'Camp Gear - Prep', 'Mechanical', 'Kitchen - Internal'];
 
-  const chartData = categories.map((cat, ci) => ({{
-    name:   cat,
-    labels: AU_BRANCHES.map(b => b.code),
-    values: AU_BRANCHES.map(b => b.by_category[cat] || 0)
-}}));
+  const barAreaX = 0.4;
+  const barAreaY = 0.9;
+  const barAreaH = 2.7;
+  const barW = 0.8;
+  const barGap = 0.28;
+  const maxVal = Math.max(...AU_BRANCHES.map(b =>
+    ALL_CATS.reduce((sum, cat) => sum + (b.by_category[cat] || 0), 0)
+  ), 1);
 
-  slide.addChart(pres.charts.BAR, chartData, {{
-    x: 0.4, y: 0.9, w: 6.2, h: 3.5,
-    barDir:    'col',
-    barGrouping: 'stacked',
-    catAxisLabelFontSize: 10,
-    catAxisLabelColor: MID_GREY,
-    chartColors: catColors,
-    showLegend: true,
-    legendPos:  'b',
-    legendFontSize: 9,
-    chartArea:  {{ fill: {{ color: WHITE }}, roundedCorners: false }},
-    catAxisLabelColor: MID_GREY,
-    valAxisLabelColor: MID_GREY,
-    valGridLine: {{ color: 'E2E8F0', size: 0.5 }},
-    catGridLine: {{ style: 'none' }},
-    showValue:  false,
+  AU_BRANCHES.forEach((b, bi) => {{
+    const barX = barAreaX + bi * (barW + barGap);
+    const branchTotal = ALL_CATS.reduce((sum, cat) => sum + (b.by_category[cat] || 0), 0);
+    let stackY = barAreaY + barAreaH;
+
+    ALL_CATS.forEach((cat, ci) => {{
+      const val = b.by_category[cat] || 0;
+      if (val === 0) return;
+      const segH = (val / maxVal) * barAreaH;
+      stackY -= segH;
+      slide.addShape(pres.shapes.RECTANGLE, {{
+        x: barX, y: stackY, w: barW, h: segH,
+        fill: {{ color: catColors[ci] }}, line: {{ color: catColors[ci] }}
+      }});
+      if (segH > 0.25) {{
+        slide.addText(`A$${{Math.round(val)}}`, {{
+          x: barX, y: stackY + segH/2 - 0.1, w: barW, h: 0.2,
+          fontSize: 7, color: WHITE, align: 'center', bold: true, margin: 0
+        }});
+      }}
+    }});
+
+    // Branch label below bar
+    slide.addText(b.code, {{
+      x: barX, y: barAreaY + barAreaH + 0.08, w: barW, h: 0.22,
+      fontSize: 9, color: DARK_GREY, align: 'center', bold: true
+    }});
+    slide.addText(fmtAUD(branchTotal), {{
+      x: barX - 0.1, y: barAreaY + barAreaH + 0.3, w: barW + 0.2, h: 0.2,
+      fontSize: 7.5, color: MID_GREY, align: 'center'
+    }});
+  }});
+
+  // Legend
+  ALL_CATS.forEach((cat, ci) => {{
+    const lx = barAreaX + ci * 1.55;
+    slide.addShape(pres.shapes.RECTANGLE, {{
+      x: lx, y: 4.18, w: 0.15, h: 0.15,
+      fill: {{ color: catColors[ci] }}, line: {{ color: catColors[ci] }}
+    }});
+    slide.addText(cat, {{
+      x: lx + 0.2, y: 4.16, w: 1.3, h: 0.2,
+      fontSize: 8, color: MID_GREY
+    }});
   }});
 
   // 4 callout stats on the right
   const callouts = [
-    {{ label: 'Total AU Refunds',  value: fmtAUD(AU_TOTAL) }},
-    {{ label: 'Total Claims',      value: AU_COUNT.toString() }},
-    {{ label: 'Avg Claim Value',   value: fmtAUD(AU_AVG) }},
+    {{ label: 'Total AU Refunds', value: fmtAUD(AU_TOTAL) }},
+    {{ label: 'Total Claims',     value: AU_COUNT.toString() }},
+    {{ label: 'Avg Claim Value',  value: fmtAUD(AU_AVG) }},
     {{ label: 'Top Category',
        value: (function() {{
          let top = '', topV = 0;
          for (const [k,v] of Object.entries(AU_CAT_TOTALS)) {{ if(v>topV){{ top=k; topV=v; }} }}
-         return top;
+         return top.split(' - ')[0] || top;
        }})()
     }},
   ];
-
   callouts.forEach((c, i) => {{
     const y = 0.9 + i * 0.88;
     slide.addShape(pres.shapes.RECTANGLE, {{
@@ -643,20 +671,14 @@ pres.title  = `Travellers Autobarn — AU/NZ Refund Awareness ${{DATE_LABEL}}`;
       fontSize:9, color:'94A3B8', align:'center', margin:0
     }});
   }});
-// Branch legend table
-  const branchLegend = ['1=BNE', '2=CNS', '3=MEL', '4=SYD', '5=PER', '6=DAR'];
-  slide.addText(branchLegend.join('   '), {{
-    x: 0.4, y: 4.42, w: 6.2, h: 0.22,
-    fontSize: 9, color: MID_GREY, align: 'center', italic: true
-  }});
-  // Narrative sentence
-  // Narrative sentence
+
+  // Narrative banner
   slide.addShape(pres.shapes.RECTANGLE, {{
-    x:0.4, y:4.55, w:9.2, h:0.75,
+    x:0.4, y:4.5, w:9.2, h:0.75,
     fill:{{ color:'FFF7ED' }}, line:{{ color: ORANGE, pt:1 }}
   }});
   slide.addText(N.au_where_money_went, {{
-    x:0.55, y:4.6, w:9.0, h:0.65,
+    x:0.55, y:4.55, w:9.0, h:0.65,
     fontSize:11, color:DARK_GREY, italic:true, wrap:true
   }});
 }})();
