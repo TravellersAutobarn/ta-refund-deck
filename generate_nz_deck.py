@@ -42,14 +42,12 @@ COL = {
     "pickup":           5,
     "last_name":        6,
     "date_entered":     7,
-    "entered_by":       8,
-    "follow_up":        9,
-    "month":            10,
-    "pickup_branch":    11,
-    "refund_category":  12,
-    "amount":           13,
-    "details":          15,
-    "notes":            16,
+    "month":            8,
+    "pickup_branch":    9,
+    "refund_category":  10,
+    "amount":           11,
+    "details":          12,
+    "notes":            13,
 }
 
 
