@@ -526,13 +526,13 @@ pres.title  = `Travellers Autobarn — America Refund Awareness ${{DATE_LABEL}}`
     x:0.4, y:0.52, w:9, h:0.28,
     fontSize:11, color: MID_GREY, italic:true
   }});
-
   const catColors = ['E63946', 'F4A261', '2A9D8F', '457B9D'];
-  const chartData = Object.keys(US_CAT_TOTALS).map((cat, ci) => ({{
+  const ALL_CATS = ['DOR - GW', 'Camp Gear - Prep', 'Mechanical', 'Kitchen - Internal'];
+  const chartData = ALL_CATS.map(cat => ({{
     name:   cat,
     labels: US_BRANCHES.map(b => b.code),
     values: US_BRANCHES.map(b => b.by_category[cat] || 0)
-  }}));
+  }})).filter(series => series.values.some(v => v > 0));
 
   slide.addChart(pres.charts.BAR, chartData, {{
     x:0.4, y:0.9, w:6.2, h:3.5,
