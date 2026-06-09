@@ -78,7 +78,30 @@ def generate_america():
     return send_file(output_path, as_attachment=True,
                      download_name='america_refund_report.pptx',
                      mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation')
-
+@app.route('/generate-info-requests', methods=['POST'])
+def generate_info_requests():
+    data = request.get_json()
+    rows = data.get('rows', [])
+    date_label = data.get('date_label', 'This Period')
+    api_key = data.get('api_key', os.environ.get('ANTHROPIC_API_KEY'))
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        json.dump(rows, f)
+        data_path = f.name
+    output_path = tempfile.mktemp(suffix='.pptx')
+    result = subprocess.run([
+        sys.executable, 'generate_info_request_deck.py',
+        '--data', data_path,
+        '--output', output_path,
+        '--date-label', date_label,
+        '--api-key', api_key
+    ], capture_output=True, text=True, cwd=BASE_DIR,
+       env={**os.environ, 'NODE_PATH': os.path.join(BASE_DIR, 'node_modules')})
+    os.unlink(data_path)
+    if result.returncode != 0:
+        return jsonify({'error': result.stderr + result.stdout}), 500
+    return send_file(output_path, as_attachment=True,
+                     download_name='info_request_report.pptx',
+                     mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation')
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({'status': 'ok'})
