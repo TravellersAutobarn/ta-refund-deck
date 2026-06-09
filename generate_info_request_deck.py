@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
 """
-Travellers Autobarn — Information-Request Trends Deck Generator
-================================================================
-Spans ALL branches (AU, NZ, US) in a single monthly view.
-Input is the aggregated, already-classified ticket array from Make:
-    [ {"branch": "...", "issue": "..."}, ... ]
-Calculates all trend stats in Python, calls Claude API for narrative text
-only, then shells out to Node/PptxGenJS to build the final .pptx file.
-
-Usage:
-    echo '<json_data>' | python generate_info_request_deck.py
-    python generate_info_request_deck.py --data data.json --output out.pptx
-    python generate_info_request_deck.py --data data.json --skip-claude
+Travellers Autobarn — Information-Request Trends Deck Generator (v3)
+====================================================================
+Input is the aggregated array from Make:
+    [ {"branch": "...", "issue": "Category :: specific question"}, ... ]
+The `issue` field may be just "Category" or "Category :: detail".
+Splits category (for trends) from detail (the actual question), so the deck
+shows what customers really asked, not just the bucket.
 """
 
 import sys
@@ -25,8 +20,6 @@ from collections import Counter, defaultdict
 import anthropic
 
 # ─── Branch colour config ───────────────────────────────────────────────────
-# Keyed by lowercased branch string (matches both city names and codes).
-# Brisbane = TA orange (home branch). Swap in your canonical hex if different.
 
 BRANCH_COLORS = {
     "brisbane": "E97132", "bne": "E97132",
@@ -50,6 +43,21 @@ def branch_color(branch, idx):
     return BRANCH_COLORS.get(key, FALLBACK_PALETTE[idx % len(FALLBACK_PALETTE)])
 
 
+def split_issue(raw):
+    """Turn 'Category :: specific question' into (category, detail).
+    Tolerates plain 'Category' (no detail) and ':' as a fallback separator."""
+    raw = str(raw or "").strip()
+    if not raw:
+        return ("Unknown", "")
+    for sep in ("::", " - ", ":"):
+        if sep in raw:
+            cat, detail = raw.split(sep, 1)
+            cat, detail = cat.strip(), detail.strip()
+            if cat:
+                return (cat, detail)
+    return (raw, "")
+
+
 # ─── Data loading ─────────────────────────────────────────────────────────────
 
 def load_data(args):
@@ -66,17 +74,21 @@ def calculate_stats(rows):
     by_issue = Counter()
     by_branch = Counter()
     by_branch_issue = defaultdict(Counter)
+    details_by_issue = defaultdict(list)
 
     for r in rows:
         if isinstance(r, dict):
             branch = str(r.get("branch") or "Unknown").strip() or "Unknown"
-            issue = str(r.get("issue") or "Unknown").strip() or "Unknown"
-        else:  # tolerate [branch, issue] arrays
+            raw_issue = r.get("issue")
+        else:
             branch = str(r[0]).strip() if len(r) > 0 else "Unknown"
-            issue = str(r[1]).strip() if len(r) > 1 else "Unknown"
-        by_issue[issue] += 1
+            raw_issue = r[1] if len(r) > 1 else None
+        category, detail = split_issue(raw_issue)
+        by_issue[category] += 1
         by_branch[branch] += 1
-        by_branch_issue[branch][issue] += 1
+        by_branch_issue[branch][category] += 1
+        if detail:
+            details_by_issue[category].append(detail)
 
     issue_ranking = by_issue.most_common()
     branch_ranking = by_branch.most_common()
@@ -97,6 +109,15 @@ def calculate_stats(rows):
             "top_issue_count": top[1],
         })
 
+    # Specific questions per category (deduped, capped), ordered by category size
+    details_by_category = []
+    for name, count in issue_ranking:
+        seen = []
+        for d in details_by_issue.get(name, []):
+            if d not in seen:
+                seen.append(d)
+        details_by_category.append({"category": name, "count": count, "details": seen})
+
     return {
         "total": total,
         "num_categories": len(issue_ranking),
@@ -104,6 +125,7 @@ def calculate_stats(rows):
         "busiest_branch": {"name": busiest[0], "count": busiest[1]},
         "issue_ranking": [{"name": n, "count": c} for n, c in issue_ranking],
         "branches": branches,
+        "details_by_category": details_by_category,
     }
 
 
@@ -118,15 +140,20 @@ def get_claude_narratives(stats, date_label, api_key=None):
         "most_asked_overall": stats["top_issue_overall"],
         "busiest_branch": stats["busiest_branch"],
         "request_types_ranked": stats["issue_ranking"],
+        "specific_questions_by_category": [
+            {"category": d["category"], "count": d["count"], "examples": d["details"][:6]}
+            for d in stats["details_by_category"] if d["details"]
+        ],
         "branches": [
             {"name": b["name"], "count": b["count"], "pct": b["pct"],
-             "top_request": b["top_issue"], "top_request_count": b["top_issue_count"]}
+             "top_request": b["top_issue"]}
             for b in stats["branches"]
         ],
     }
 
-    prompt = f"""You are writing concise insights for an internal monthly presentation for Travellers Autobarn, a campervan rental company. The deck shows which information customers ask for most, so the operations manager can target staff training.
+    prompt = f"""You are writing concise insights for an internal monthly presentation for Travellers Autobarn, a campervan rental company. The deck shows what information customers ask for, so the operations manager can target staff training and reduce repeat questions.
 All numbers below are pre-calculated — DO NOT recalculate or change any figures.
+Base your TRAINING RECOMMENDATIONS on the SPECIFIC questions customers actually asked (specific_questions_by_category), not just the category labels. Each recommendation should name a concrete fix (e.g. "Add Auckland depot directions to the booking confirmation"), not a vague action.
 Frame branch differences as training opportunities, never as blame on branch staff.
 Return ONLY valid JSON with the exact keys listed. No markdown, no code fences.
 
@@ -135,16 +162,17 @@ STATS:
 
 Return JSON with these exact keys:
 {{
-  "cover_insight": "One sharp sentence (max 20 words) on the overall information-request picture this period.",
+  "cover_insight": "One sharp sentence (max 20 words) on the overall picture this period.",
   "by_category_insight": "One sentence (max 25 words) on what the category ranking tells us.",
   "by_branch_insight": "One sentence (max 25 words) on how request volume varies across branches.",
-  "training_priority": "One sentence (max 25 words) naming the single biggest training priority for next month.",
-  "training_recommendations": ["3 to 4 short, concrete training actions, each max 14 words"]
+  "asked_insight": "One sentence (max 25 words) on the most common specific questions and what they reveal.",
+  "training_priority": "One sentence (max 25 words) naming the single biggest, most concrete training/process fix for next month.",
+  "training_recommendations": ["3 to 4 specific, concrete actions tied to the actual questions, each max 16 words"]
 }}"""
 
     message = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=900,
+        max_tokens=1100,
         messages=[{"role": "user", "content": prompt}],
     )
     raw = message.content[0].text.strip()
@@ -169,6 +197,7 @@ const TOP_ISSUE    = {json.dumps(stats["top_issue_overall"])};
 const BUSIEST      = {json.dumps(stats["busiest_branch"])};
 const ISSUE_RANK   = {json.dumps(stats["issue_ranking"])};
 const BRANCHES     = {json.dumps(stats["branches"])};
+const DETAILS      = {json.dumps(stats["details_by_category"])};
 const N            = {json.dumps(narratives)};
 
 const NAVY='0F172A', WHITE='FFFFFF', ORANGE='F97316', LIGHT_GREY='F8FAFC',
@@ -271,7 +300,55 @@ pres.title = `Travellers Autobarn — Information Requests ${{DATE_LABEL}}`;
   s.addText(N.by_branch_insight, {{ x:0.55, y:4.55, w:9.0, h:0.62, fontSize:11, color:DARK_GREY, italic:true, wrap:true }});
 }})();
 
-// ── SLIDE 4 — Training focus ────────────────────────────────────────────────
+// ── SLIDE 4 — What customers actually asked ─────────────────────────────────
+(function() {{
+  const s = pres.addSlide();
+  s.background = {{ color: WHITE }};
+  s.addShape(pres.shapes.RECTANGLE, {{ x:0, y:0, w:10, h:0.08, fill:{{color:NAVY}}, line:{{color:NAVY}} }});
+  s.addText('WHAT CUSTOMERS ACTUALLY ASKED', {{ x:0.4, y:0.15, w:9.2, h:0.4, fontSize:20, bold:true, color:NAVY }});
+  s.addText(`The specific questions behind each category — ${{DATE_LABEL}}`, {{ x:0.4, y:0.52, w:9.2, h:0.3, fontSize:11, color:MID_GREY, italic:true }});
+
+  const blocks = DETAILS.filter(d => d.details && d.details.length > 0).slice(0, 4);
+
+  if (blocks.length === 0) {{
+    s.addShape(pres.shapes.RECTANGLE, {{ x:0.4, y:1.3, w:9.2, h:1.0, fill:{{color:LIGHT_GREY}}, line:{{color:'E2E8F0', pt:1}} }});
+    s.addText('No specific question detail captured yet — once tickets carry a one-line summary, the actual questions will appear here.', {{
+      x:0.7, y:1.5, w:8.6, h:0.6, fontSize:13, color:MID_GREY, italic:true, wrap:true, valign:'middle' }});
+    return;
+  }}
+
+  // two columns of category blocks
+  const colX = [0.4, 5.05];
+  const colW = 4.55;
+  const perCol = Math.ceil(blocks.length / 2);
+  blocks.forEach((b, i) => {{
+    const col = i < perCol ? 0 : 1;
+    const idxInCol = i < perCol ? i : i - perCol;
+    const x = colX[col];
+    const blockH = 1.85;
+    const y = 1.0 + idxInCol * (blockH + 0.15);
+
+    s.addShape(pres.shapes.RECTANGLE, {{ x, y, w:colW, h:blockH, fill:{{color:LIGHT_GREY}}, line:{{color:'E2E8F0', pt:1}}, shadow:shadow() }});
+    // count chip
+    s.addShape(pres.shapes.RECTANGLE, {{ x:x+0.15, y:y+0.15, w:0.55, h:0.34, fill:{{color:ORANGE}}, line:{{color:ORANGE}} }});
+    s.addText(b.count.toString(), {{ x:x+0.15, y:y+0.15, w:0.55, h:0.34, fontSize:14, bold:true, color:WHITE, align:'center', valign:'middle', margin:0 }});
+    s.addText(clip(b.category, 34), {{ x:x+0.8, y:y+0.15, w:colW-0.95, h:0.34, fontSize:13, bold:true, color:NAVY, valign:'middle', margin:0 }});
+
+    const qs = b.details.slice(0, 4);
+    qs.forEach((q, qi) => {{
+      const qy = y + 0.58 + qi * 0.3;
+      s.addText([
+        {{ text:'•  ', options:{{ color:ORANGE, bold:true }} }},
+        {{ text: clip(q, 60), options:{{ color:DARK_GREY }} }},
+      ], {{ x:x+0.2, y:qy, w:colW-0.35, h:0.28, fontSize:9.5, valign:'middle', margin:0 }});
+    }});
+  }});
+
+  s.addShape(pres.shapes.RECTANGLE, {{ x:0.4, y:5.0, w:9.2, h:0.5, fill:{{color:'FFF7ED'}}, line:{{color:ORANGE, pt:1}} }});
+  s.addText(N.asked_insight || '', {{ x:0.55, y:5.03, w:9.0, h:0.44, fontSize:10.5, color:DARK_GREY, italic:true, wrap:true, valign:'middle' }});
+}})();
+
+// ── SLIDE 5 — Training focus ────────────────────────────────────────────────
 (function() {{
   const s = pres.addSlide();
   s.background = {{ color: LIGHT_GREY }};
@@ -283,7 +360,6 @@ pres.title = `Travellers Autobarn — Information Requests ${{DATE_LABEL}}`;
   s.addText('PRIORITY', {{ x:0.55, y:1.0, w:2, h:0.3, fontSize:9, bold:true, color:ORANGE, charSpacing:2 }});
   s.addText(N.training_priority, {{ x:0.55, y:1.26, w:9.0, h:0.5, fontSize:13, color:WHITE, wrap:true, margin:0 }});
 
-  // Left: recommended actions
   s.addText('RECOMMENDED ACTIONS', {{ x:0.4, y:2.0, w:4.6, h:0.3, fontSize:12, bold:true, color:NAVY, charSpacing:1 }});
   const recs = (N.training_recommendations || []).slice(0, 4);
   recs.forEach((r, i) => {{
@@ -294,7 +370,6 @@ pres.title = `Travellers Autobarn — Information Requests ${{DATE_LABEL}}`;
     s.addText(r, {{ x:0.95, y, w:3.95, h:0.54, fontSize:10.5, color:DARK_GREY, valign:'middle', wrap:true, margin:0 }});
   }});
 
-  // Right: per-branch focus from data
   s.addText('BY-BRANCH FOCUS', {{ x:5.2, y:2.0, w:4.4, h:0.3, fontSize:12, bold:true, color:NAVY, charSpacing:1 }});
   const bf = BRANCHES.slice(0, 6);
   bf.forEach((b, i) => {{
@@ -342,6 +417,7 @@ def main():
             "cover_insight": f"{stats['total']} information requests this period, led by {stats['top_issue_overall']['name']}.",
             "by_category_insight": "Category ranking highlights the questions customers ask most often.",
             "by_branch_insight": "Request volume varies across branches, pointing to where support is most needed.",
+            "asked_insight": "The specific questions reveal where wording and instructions could be clearer.",
             "training_priority": f"Focus next month's training on {stats['top_issue_overall']['name']}.",
             "training_recommendations": [
                 "Add a quick-reference card for the top request type.",
