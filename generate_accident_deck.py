@@ -121,48 +121,55 @@ pres.title = 'Travellers Autobarn — Accident Report (' + REGION + ')';
   s.addText('CONFIDENTIAL — INTERNAL USE ONLY', {{ x:0.5, y:5.35, w:9, h:0.2, fontSize:8, color:'334155', align:'center' }});
 }})();
 
-// ── Accident cards — 3 per slide ───────────────────────────────────────────────
-const PER_SLIDE = 3;
-for (let p = 0; p < Math.max(Math.ceil(ITEMS.length / PER_SLIDE), 1); p++) {{
+// ── One slide per accident ─────────────────────────────────────────────────
+if (ITEMS.length === 0) {{
   const s = pres.addSlide();
   s.background = {{ color: LIGHT_GREY }};
   s.addShape(pres.shapes.RECTANGLE, {{ x:0, y:0, w:10, h:0.08, fill:{{color:NAVY}}, line:{{color:NAVY}} }});
   s.addText('ACCIDENT DETAIL', {{ x:0.4, y:0.12, w:6, h:0.4, fontSize:18, bold:true, color:NAVY }});
   s.addText(REGION + DSUF, {{ x:0.4, y:0.49, w:9.2, h:0.28, fontSize:10, color:MID_GREY, italic:true }});
-
-  const slice = ITEMS.slice(p * PER_SLIDE, p * PER_SLIDE + PER_SLIDE);
-  if (slice.length === 0) {{
-    s.addText('No accidents reported for this region in the period.', {{ x:0.4, y:2.5, w:9.2, h:0.6, fontSize:14, color:MID_GREY, italic:true, align:'center' }});
-  }}
-  slice.forEach((a, i) => {{
-    const y = 0.95 + i * 1.5;
-    const cardH = 1.4;
-    // card
-    s.addShape(pres.shapes.RECTANGLE, {{ x:0.4, y, w:9.2, h:cardH, fill:{{color:WHITE}}, line:{{color:BORDER, pt:1}}, shadow:shadow() }});
-    s.addShape(pres.shapes.RECTANGLE, {{ x:0.4, y, w:0.08, h:cardH, fill:{{color:ORANGE}}, line:{{color:ORANGE}} }});
-
-    // photo or placeholder
-    const px = 0.6, py = y + 0.12, pw = 2.3, ph = cardH - 0.24;
-    if (a.photo) {{
-      s.addShape(pres.shapes.RECTANGLE, {{ x:px, y:py, w:pw, h:ph, fill:{{color:'EEF2F7'}}, line:{{color:BORDER, pt:1}} }});
-      s.addImage({{ data:a.photo, x:px, y:py, w:pw, h:ph, sizing:{{ type:'contain', w:pw, h:ph }} }});
-    }} else {{
-      s.addShape(pres.shapes.RECTANGLE, {{ x:px, y:py, w:pw, h:ph, fill:{{color:'F1F5F9'}}, line:{{color:'CBD5E1', pt:1, dashType:'dash'}} }});
-      s.addText('Photo of damage\\n(not supplied)', {{ x:px, y:py, w:pw, h:ph, fontSize:10, color:'94A3B8', align:'center', valign:'middle', italic:true, margin:0 }});
-    }}
-
-    // details
-    const dx = px + pw + 0.25, dw = 9.6 - dx;
-    s.addText([
-      {{ text:'Rego:  ', options:{{ bold:true, color:MID_GREY }} }},
-      {{ text: clip(a.license_plate || '—', 16), options:{{ bold:true, color:NAVY }} }},
-    ], {{ x:dx, y:y+0.12, w:dw, h:0.32, fontSize:15, valign:'middle', margin:0 }});
-    s.addText(clip(a.cause_summary || a.cause || 'No cause recorded.', 150), {{
-      x:dx, y:y+0.46, w:dw, h:0.55, fontSize:11, color:DARK_GREY, wrap:true, valign:'top', margin:0 }});
-    const meta = [a.location, a.date].filter(Boolean).join('   •   ');
-    if (meta) s.addText(meta, {{ x:dx, y:y+1.04, w:dw, h:0.26, fontSize:9.5, color:MID_GREY, italic:true, valign:'middle', margin:0 }});
-  }});
+  s.addText('No accidents reported for this region in the period.', {{ x:0.4, y:2.5, w:9.2, h:0.6, fontSize:14, color:MID_GREY, italic:true, align:'center' }});
 }}
+
+ITEMS.forEach((a, idx) => {{
+  const s = pres.addSlide();
+  s.background = {{ color: LIGHT_GREY }};
+
+  // ── header bar ──
+  s.addShape(pres.shapes.RECTANGLE, {{ x:0, y:0, w:10, h:0.08, fill:{{color:NAVY}}, line:{{color:NAVY}} }});
+  s.addText('ACCIDENT REPORT', {{ x:0.4, y:0.12, w:5, h:0.35, fontSize:16, bold:true, color:NAVY }});
+  s.addText('Incident ' + (idx+1) + ' of ' + ITEMS.length + '  •  ' + REGION + DSUF, {{
+    x:0.4, y:0.44, w:9.2, h:0.25, fontSize:9.5, color:MID_GREY, italic:true }});
+
+  // ── rego chip ──
+  s.addShape(pres.shapes.RECTANGLE, {{ x:7.0, y:0.1, w:2.6, h:0.55, fill:{{color:NAVY}}, line:{{color:'334155'}}, shadow:shadow() }});
+  s.addText([
+    {{ text:'REGO  ', options:{{ fontSize:8, color:'94A3B8', bold:true }} }},
+    {{ text: clip(a.license_plate || '—', 12), options:{{ fontSize:16, color:WHITE, bold:true }} }},
+  ], {{ x:7.0, y:0.1, w:2.6, h:0.55, align:'center', valign:'middle', margin:0 }});
+
+  // ── cause / description box ──
+  s.addShape(pres.shapes.RECTANGLE, {{ x:0.4, y:0.82, w:9.2, h:1.4, fill:{{color:WHITE}}, line:{{color:BORDER, pt:1}}, shadow:shadow() }});
+  s.addShape(pres.shapes.RECTANGLE, {{ x:0.4, y:0.82, w:0.08, h:1.4, fill:{{color:ORANGE}}, line:{{color:ORANGE}} }});
+  s.addText('WHAT HAPPENED', {{ x:0.6, y:0.88, w:8.8, h:0.28, fontSize:9, bold:true, color:ORANGE, charSpacing:1.5 }});
+  s.addText(clip(a.cause_summary || 'No cause recorded.', 300), {{
+    x:0.6, y:1.16, w:8.7, h:0.85, fontSize:13, color:DARK_GREY, wrap:true, valign:'top', margin:0 }});
+
+  // ── location / date ──
+  const meta = [a.location, a.date].filter(Boolean).join('   •   ');
+  if (meta) s.addText(meta, {{ x:0.6, y:2.12, w:8.7, h:0.22, fontSize:9.5, color:MID_GREY, italic:true }});
+
+  // ── photo area ──
+  const photoY = 2.45, photoH = 3.0;
+  s.addText('DAMAGE PHOTO', {{ x:0.4, y:photoY-0.28, w:4, h:0.25, fontSize:9, bold:true, color:MID_GREY, charSpacing:1.5 }});
+  if (a.photo) {{
+    s.addShape(pres.shapes.RECTANGLE, {{ x:0.4, y:photoY, w:9.2, h:photoH, fill:{{color:'EEF2F7'}}, line:{{color:BORDER, pt:1}} }});
+    s.addImage({{ data:a.photo, x:0.4, y:photoY, w:9.2, h:photoH, sizing:{{ type:'contain', w:9.2, h:photoH }} }});
+  }} else {{
+    s.addShape(pres.shapes.RECTANGLE, {{ x:0.4, y:photoY, w:9.2, h:photoH, fill:{{color:'F1F5F9'}}, line:{{color:'CBD5E1', pt:1, dashType:'dash'}} }});
+    s.addText('Photo of damage not supplied', {{ x:0.4, y:photoY, w:9.2, h:photoH, fontSize:13, color:'94A3B8', align:'center', valign:'middle', italic:true }});
+  }}
+}});
 
 const outputPath = {json.dumps(output_path)};
 pres.writeFile({{ fileName: outputPath }})
