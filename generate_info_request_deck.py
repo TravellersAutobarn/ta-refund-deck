@@ -43,6 +43,45 @@ def branch_color(branch, idx):
     return BRANCH_COLORS.get(key, FALLBACK_PALETTE[idx % len(FALLBACK_PALETTE)])
 
 
+import re
+
+# Canonical branch names — unifies tags ("auckland"), codes ("AUK"), case.
+BRANCH_CANON = {
+    "auckland": "Auckland", "auk": "Auckland",
+    "christchurch": "Christchurch", "chc": "Christchurch",
+    "brisbane": "Brisbane", "bne": "Brisbane",
+    "sydney": "Sydney", "syd": "Sydney",
+    "melbourne": "Melbourne", "mel": "Melbourne",
+    "perth": "Perth", "per": "Perth",
+    "darwin": "Darwin", "dar": "Darwin", "drw": "Darwin",
+    "cairns": "Cairns", "cns": "Cairns",
+    "los angeles": "Los Angeles", "lax": "Los Angeles",
+    "las vegas": "Las Vegas", "las": "Las Vegas",
+    "san francisco": "San Francisco", "sfo": "San Francisco",
+}
+
+
+def canon_branch(value):
+    key = str(value or "").strip().lower()
+    if not key:
+        return ""
+    return BRANCH_CANON.get(key, str(value).strip().title())
+
+
+def resolve_branch(branch_field, subject):
+    """Use the Pickup Location field if it's filled; otherwise pull the
+    branch code (e.g. '(AUK)') out of the ticket subject."""
+    b = canon_branch(branch_field)
+    if b and b.lower() != "unknown":
+        return b
+    codes = re.findall(r"\(([A-Za-z]{2,4})\)", str(subject or ""))
+    for code in reversed(codes):  # branch code is usually last in the subject
+        hit = BRANCH_CANON.get(code.strip().lower())
+        if hit:
+            return hit
+    return "Unknown"
+
+
 def split_issue(raw):
     """Turn 'Category :: specific question' into (category, detail).
     Tolerates plain 'Category' (no detail) and ':' as a fallback separator."""
@@ -78,10 +117,10 @@ def calculate_stats(rows):
 
     for r in rows:
         if isinstance(r, dict):
-            branch = str(r.get("branch") or "Unknown").strip() or "Unknown"
+            branch = resolve_branch(r.get("branch"), r.get("subject"))
             raw_issue = r.get("issue")
         else:
-            branch = str(r[0]).strip() if len(r) > 0 else "Unknown"
+            branch = resolve_branch(r[0] if len(r) > 0 else "", r[2] if len(r) > 2 else "")
             raw_issue = r[1] if len(r) > 1 else None
         category, detail = split_issue(raw_issue)
         by_issue[category] += 1
@@ -204,10 +243,11 @@ const NAVY='0F172A', WHITE='FFFFFF', ORANGE='F97316', LIGHT_GREY='F8FAFC',
       MID_GREY='64748B', DARK_GREY='1E293B';
 const shadow = () => ({{ type:'outer', blur:8, offset:2, angle:135, color:'000000', opacity:0.12 }});
 const clip = (s, n) => (s && s.length > n) ? s.substring(0, n-1) + '…' : (s || '');
+const DSUF = DATE_LABEL ? ' — ' + DATE_LABEL : '';
 
 const pres = new pptxgen();
 pres.layout = 'LAYOUT_16x9';
-pres.title = `Travellers Autobarn — Information Requests ${{DATE_LABEL}}`;
+pres.title = 'Travellers Autobarn — Information Requests' + DSUF;
 
 // ── SLIDE 1 — Cover ─────────────────────────────────────────────────────────
 (function() {{
@@ -217,7 +257,7 @@ pres.title = `Travellers Autobarn — Information Requests ${{DATE_LABEL}}`;
   s.addText('TRAVELLERS AUTOBARN', {{ x:0.5, y:0.2, w:7, h:0.4, fontSize:11, bold:true, color:'94A3B8', charSpacing:3 }});
   s.addText('INFORMATION REQUESTS', {{ x:0.5, y:0.55, w:9, h:0.9, fontSize:46, bold:true, color:WHITE, charSpacing:1 }});
   s.addText('What customers asked us for most', {{ x:0.5, y:1.4, w:9, h:0.45, fontSize:19, color:'94A3B8', italic:true }});
-  s.addText(DATE_LABEL, {{ x:0.5, y:1.8, w:9, h:0.35, fontSize:13, color:'64748B' }});
+  if (DATE_LABEL) s.addText(DATE_LABEL, {{ x:0.5, y:1.8, w:9, h:0.35, fontSize:13, color:'64748B' }});
   const cards = [
     {{ label:'Total Requests', value: TOTAL.toString() }},
     {{ label:'Most Asked',     value: clip(TOP_ISSUE.name, 18) }},
@@ -241,7 +281,7 @@ pres.title = `Travellers Autobarn — Information Requests ${{DATE_LABEL}}`;
   s.background = {{ color: LIGHT_GREY }};
   s.addShape(pres.shapes.RECTANGLE, {{ x:0, y:0, w:10, h:0.08, fill:{{color:NAVY}}, line:{{color:NAVY}} }});
   s.addText('MOST-ASKED INFORMATION REQUESTS', {{ x:0.4, y:0.15, w:9.2, h:0.4, fontSize:20, bold:true, color:NAVY }});
-  s.addText(`Overall ranking — ${{DATE_LABEL}}`, {{ x:0.4, y:0.52, w:9, h:0.3, fontSize:11, color:MID_GREY, italic:true }});
+  s.addText('Overall ranking' + DSUF, {{ x:0.4, y:0.52, w:9, h:0.3, fontSize:11, color:MID_GREY, italic:true }});
 
   const top = ISSUE_RANK.slice(0, 8);
   const maxV = Math.max(...top.map(t => t.count), 1);
@@ -278,7 +318,7 @@ pres.title = `Travellers Autobarn — Information Requests ${{DATE_LABEL}}`;
   s.background = {{ color: WHITE }};
   s.addShape(pres.shapes.RECTANGLE, {{ x:0, y:0, w:10, h:0.08, fill:{{color:NAVY}}, line:{{color:NAVY}} }});
   s.addText('WHERE THE QUESTIONS COME FROM', {{ x:0.4, y:0.15, w:9.2, h:0.4, fontSize:20, bold:true, color:NAVY }});
-  s.addText(`Information requests by branch — ${{DATE_LABEL}}`, {{ x:0.4, y:0.52, w:9, h:0.3, fontSize:11, color:MID_GREY, italic:true }});
+  s.addText('Information requests by branch' + DSUF, {{ x:0.4, y:0.52, w:9, h:0.3, fontSize:11, color:MID_GREY, italic:true }});
 
   const top = BRANCHES.slice(0, 10);
   const maxV = Math.max(...top.map(b => b.count), 1);
@@ -306,7 +346,7 @@ pres.title = `Travellers Autobarn — Information Requests ${{DATE_LABEL}}`;
   s.background = {{ color: WHITE }};
   s.addShape(pres.shapes.RECTANGLE, {{ x:0, y:0, w:10, h:0.08, fill:{{color:NAVY}}, line:{{color:NAVY}} }});
   s.addText('WHAT CUSTOMERS ACTUALLY ASKED', {{ x:0.4, y:0.15, w:9.2, h:0.4, fontSize:20, bold:true, color:NAVY }});
-  s.addText(`The specific questions behind each category — ${{DATE_LABEL}}`, {{ x:0.4, y:0.52, w:9.2, h:0.3, fontSize:11, color:MID_GREY, italic:true }});
+  s.addText('The specific questions behind each category' + DSUF, {{ x:0.4, y:0.52, w:9.2, h:0.3, fontSize:11, color:MID_GREY, italic:true }});
 
   const blocks = DETAILS.filter(d => d.details && d.details.length > 0).slice(0, 4);
 
@@ -354,7 +394,7 @@ pres.title = `Travellers Autobarn — Information Requests ${{DATE_LABEL}}`;
   s.background = {{ color: LIGHT_GREY }};
   s.addShape(pres.shapes.RECTANGLE, {{ x:0, y:0, w:10, h:0.08, fill:{{color:NAVY}}, line:{{color:NAVY}} }});
   s.addText('TRAINING FOCUS FOR NEXT MONTH', {{ x:0.4, y:0.15, w:9.2, h:0.4, fontSize:20, bold:true, color:NAVY }});
-  s.addText(`Turning this month's questions into staff training — ${{DATE_LABEL}}`, {{ x:0.4, y:0.52, w:9.2, h:0.3, fontSize:11, color:MID_GREY, italic:true }});
+  s.addText('Turning customer questions into staff training' + DSUF, {{ x:0.4, y:0.52, w:9.2, h:0.3, fontSize:11, color:MID_GREY, italic:true }});
 
   s.addShape(pres.shapes.RECTANGLE, {{ x:0.4, y:0.95, w:9.2, h:0.85, fill:{{color:'7C2D12'}}, line:{{color:ORANGE, pt:1.5}}, shadow:shadow() }});
   s.addText('PRIORITY', {{ x:0.55, y:1.0, w:2, h:0.3, fontSize:9, bold:true, color:ORANGE, charSpacing:2 }});
@@ -409,7 +449,7 @@ def main():
     stats = calculate_stats(rows)
     print(f"  {stats['total']} requests across {len(stats['branches'])} branches", file=sys.stderr)
 
-    date_label = args.date_label or datetime.now().strftime("%B %Y")
+    date_label = args.date_label if args.date_label is not None else datetime.now().strftime("%B %Y")
 
     if args.skip_claude:
         print("Skipping Claude API...", file=sys.stderr)
