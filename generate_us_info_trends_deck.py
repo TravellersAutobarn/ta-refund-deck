@@ -1,4 +1,3 @@
-```python
 #!/usr/bin/env python3
 """
 Travellers Autobarn — US More Information Trends Deck Generator
@@ -708,4 +707,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-```
