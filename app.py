@@ -120,17 +120,9 @@ def generate_america():
 @app.route("/generate-info-requests", methods=["POST"])
 def generate_info_requests():
     """
-    Information-request trends deck (the one being actively built).
-
-    Expects rows-based JSON from Make:
-    {
-      "rows": [
-        {"branch": "...", "issue": "Category :: specific question", "subject": "..."}
-      ],
-      "date_label": ""
-    }
-
-    An empty date_label produces a date-less deck (no month shown anywhere).
+    Information-request trends deck.
+    Expects: { "rows": [ {"branch": "...", "issue": "Category :: question", "subject": "..."} ], "date_label": "" }
+    Empty date_label = date-less deck.
     """
 
     data = request.get_json()
@@ -151,32 +143,36 @@ def generate_info_requests():
     )
 
 
+@app.route("/generate-accidents", methods=["POST"])
+def generate_accidents():
+    """
+    Accident report deck.
+    Expects: { "rows": [ {"license_plate": "...", "cause_summary": "...", "location": "...", "date": "...", "photo_url": "..."} ], "region": "America", "date_label": "" }
+    """
+
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "No JSON body received"}), 400
+
+    region = data.get("region", "All Regions")
+    date_label = data.get("date_label", "")
+    rows = data.get("rows", [])
+    api_key = data.get("api_key", os.environ.get("ANTHROPIC_API_KEY"))
+
+    return run_deck_generator(
+        script_name="generate_accident_deck.py",
+        data={"rows": rows, "region": region, "date_label": date_label},
+        output_filename="accident_report_" + region.replace(" ", "_").replace("&", "and").lower() + ".pptx",
+        date_label=date_label,
+        api_key=api_key,
+    )
+
+
 @app.route("/generate-us-info-trends", methods=["POST"])
 def generate_us_info_trends():
     """
-    New More Information Trends deck endpoint.
-
-    This is the one you should use in Make for the new US More Information deck.
-
-    Make HTTP URL:
-    https://ta-refund-deck.onrender.com/generate-us-info-trends
-
-    Expected JSON body:
-
-    {
-      "date_label": "Previous Month",
-      "slides": [
-        {
-          "slide_number": 1,
-          "title": "Las Vegas Top 3 Trends",
-          "bullets": [
-            "Trend 1: ...",
-            "Trend 2: ...",
-            "Trend 3: ..."
-          ]
-        }
-      ]
-    }
+    US More Information Trends deck.
     """
 
     data = request.get_json()
