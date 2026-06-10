@@ -47,16 +47,62 @@ EXPECTED_SLIDES = [
 ]
 
 
+def maybe_parse_json_string(value):
+    """
+    If value is a JSON string, parse it.
+    Otherwise return the value unchanged.
+    """
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.startswith("{") or stripped.startswith("["):
+            try:
+                return json.loads(stripped)
+            except json.JSONDecodeError:
+                return value
+    return value
+
+
 def load_data(args):
     if args.data:
         with open(args.data, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+    else:
+        raw = sys.stdin.read().strip()
+        if not raw:
+            raise ValueError("No JSON input received.")
+        data = json.loads(raw)
 
-    raw = sys.stdin.read().strip()
-    if not raw:
-        raise ValueError("No JSON input received.")
+    data = maybe_parse_json_string(data)
 
-    return json.loads(raw)
+    # Defensive support for Anthropic/Make-style wrapped responses.
+    # This is not required if Make sends rawResponse correctly, but it prevents
+    # the old "No slides found" issue if a wrapper slips through.
+    if isinstance(data, dict):
+        if "rawResponse" in data:
+            parsed = maybe_parse_json_string(data.get("rawResponse"))
+            if isinstance(parsed, (dict, list)):
+                return parsed
+
+        if "text" in data:
+            parsed = maybe_parse_json_string(data.get("text"))
+            if isinstance(parsed, (dict, list)):
+                return parsed
+
+        if "Text" in data:
+            parsed = maybe_parse_json_string(data.get("Text"))
+            if isinstance(parsed, (dict, list)):
+                return parsed
+
+        if "ContentArray" in data and isinstance(data["ContentArray"], list):
+            for item in data["ContentArray"]:
+                if isinstance(item, dict):
+                    parsed = maybe_parse_json_string(
+                        item.get("Text") or item.get("text") or item.get("content")
+                    )
+                    if isinstance(parsed, (dict, list)):
+                        return parsed
+
+    return data
 
 
 def normalize_slides(data):
@@ -119,9 +165,9 @@ def normalize_slides(data):
 
 
 def build_pptx_script(slides, date_label, output_path):
-    slides_js = json.dumps(slides)
-    date_label_js = json.dumps(date_label)
-    output_path_js = json.dumps(output_path)
+    slides_js = json.dumps(slides, ensure_ascii=False)
+    date_label_js = json.dumps(date_label, ensure_ascii=False)
+    output_path_js = json.dumps(output_path, ensure_ascii=False)
 
     script = f"""
 'use strict';
@@ -133,8 +179,13 @@ const DATE_LABEL = {date_label_js};
 const OUTPUT_PATH = {output_path_js};
 
 const pres = new pptxgen();
-pres.defineLayout({ name: 'LAYOUT_CUSTOM_WIDE', width: 10, height: 5.625 });
+
+// IMPORTANT:
+// This JavaScript is inside a Python f-string, so object braces must be doubled.
+// This custom layout avoids pptxgenjs UNKNOWN-LAYOUT errors.
+pres.defineLayout({{ name: 'LAYOUT_CUSTOM_WIDE', width: 10, height: 5.625 }});
 pres.layout = 'LAYOUT_CUSTOM_WIDE';
+
 pres.author = 'Travellers Autobarn';
 pres.company = 'Travellers Autobarn';
 pres.subject = 'US More Information Ticket Trends';
@@ -679,7 +730,12 @@ def main():
 
     script = build_pptx_script(slides, date_label, args.output)
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".js", delete=False) as f:
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".js",
+        delete=False,
+        encoding="utf-8"
+    ) as f:
         f.write(script)
         script_path = f.name
 
@@ -695,7 +751,10 @@ def main():
         env={**os.environ, "NODE_PATH": os.path.join(script_dir, "node_modules")},
     )
 
-    os.unlink(script_path)
+    try:
+        os.unlink(script_path)
+    except OSError:
+        pass
 
     if result.returncode != 0:
         print("Node.js error:", result.stderr, file=sys.stderr)
