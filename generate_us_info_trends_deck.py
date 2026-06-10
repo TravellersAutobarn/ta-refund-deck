@@ -133,7 +133,8 @@ const DATE_LABEL = {date_label_js};
 const OUTPUT_PATH = {output_path_js};
 
 const pres = new pptxgen();
-pres.layout = 'LAYOUT_16X9';
+pres.defineLayout({ name: 'LAYOUT_CUSTOM_WIDE', width: 10, height: 5.625 });
+pres.layout = 'LAYOUT_CUSTOM_WIDE';
 pres.author = 'Travellers Autobarn';
 pres.company = 'Travellers Autobarn';
 pres.subject = 'US More Information Ticket Trends';
