@@ -1,4 +1,3 @@
-```python
 from flask import Flask, request, jsonify, send_file
 import json
 import os
