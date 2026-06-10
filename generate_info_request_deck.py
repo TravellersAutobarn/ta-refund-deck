@@ -55,9 +55,9 @@ BRANCH_CANON = {
     "perth": "Perth", "per": "Perth",
     "darwin": "Darwin", "dar": "Darwin", "drw": "Darwin",
     "cairns": "Cairns", "cns": "Cairns",
-    "los angeles": "Los Angeles", "lax": "Los Angeles",
-    "las vegas": "Las Vegas", "las": "Las Vegas",
-    "san francisco": "San Francisco", "sfo": "San Francisco",
+    "los angeles": "Los Angeles", "los_angeles": "Los Angeles", "lax": "Los Angeles",
+    "las vegas": "Las Vegas", "las_vegas": "Las Vegas", "las": "Las Vegas",
+    "san francisco": "San Francisco", "san_francisco": "San Francisco", "sfo": "San Francisco",
 }
 
 
@@ -114,6 +114,7 @@ def calculate_stats(rows):
     by_branch = Counter()
     by_branch_issue = defaultdict(Counter)
     details_by_issue = defaultdict(list)
+    details_by_branch = defaultdict(Counter)
 
     for r in rows:
         if isinstance(r, dict):
@@ -128,6 +129,7 @@ def calculate_stats(rows):
         by_branch_issue[branch][category] += 1
         if detail:
             details_by_issue[category].append(detail)
+            details_by_branch[branch][detail] += 1
 
     issue_ranking = by_issue.most_common()
     branch_ranking = by_branch.most_common()
@@ -139,6 +141,7 @@ def calculate_stats(rows):
     for idx, (branch, count) in enumerate(branch_ranking):
         bi = by_branch_issue[branch].most_common()
         top = bi[0] if bi else ("None", 0)
+        eq = details_by_branch[branch].most_common(1)
         branches.append({
             "name": branch,
             "color": branch_color(branch, idx),
@@ -146,6 +149,7 @@ def calculate_stats(rows):
             "pct": round(count / total * 100, 1) if total else 0,
             "top_issue": top[0],
             "top_issue_count": top[1],
+            "example_question": eq[0][0] if eq else "",
         })
 
     # Specific questions per category (deduped, capped), ordered by category size
@@ -204,6 +208,7 @@ Return JSON with these exact keys:
   "cover_insight": "One sharp sentence (max 20 words) on the overall picture this period.",
   "by_category_insight": "One sentence (max 25 words) on what the category ranking tells us.",
   "by_branch_insight": "One sentence (max 25 words) on how request volume varies across branches.",
+  "by_branch_question_insight": "One sentence (max 25 words) on what the per-branch top questions reveal about location-specific gaps.",
   "asked_insight": "One sentence (max 25 words) on the most common specific questions and what they reveal.",
   "training_priority": "One sentence (max 25 words) naming the single biggest, most concrete training/process fix for next month.",
   "training_recommendations": ["3 to 4 specific, concrete actions tied to the actual questions, each max 16 words"]
@@ -340,6 +345,30 @@ pres.title = 'Travellers Autobarn — Information Requests' + DSUF;
   s.addText(N.by_branch_insight, {{ x:0.55, y:4.55, w:9.0, h:0.62, fontSize:11, color:DARK_GREY, italic:true, wrap:true }});
 }})();
 
+// ── SLIDE 3b — Most-asked question per branch ───────────────────────────────
+(function() {{
+  const s = pres.addSlide();
+  s.background = {{ color: LIGHT_GREY }};
+  s.addShape(pres.shapes.RECTANGLE, {{ x:0, y:0, w:10, h:0.08, fill:{{color:NAVY}}, line:{{color:NAVY}} }});
+  s.addText('WHAT EACH BRANCH ASKS MOST', {{ x:0.4, y:0.15, w:9.2, h:0.4, fontSize:20, bold:true, color:NAVY }});
+  s.addText('The most common question raised at each branch' + DSUF, {{ x:0.4, y:0.52, w:9.2, h:0.3, fontSize:11, color:MID_GREY, italic:true }});
+
+  const blist = BRANCHES.slice(0, 9);
+  const areaY = 1.0, rowH = Math.min(0.42, 3.35 / Math.max(blist.length, 1));
+  blist.forEach((b, i) => {{
+    const y = areaY + i * rowH;
+    s.addShape(pres.shapes.RECTANGLE, {{ x:0.4, y:y+0.02, w:9.2, h:rowH-0.08, fill:{{color:WHITE}}, line:{{color:'E2E8F0', pt:1}} }});
+    s.addShape(pres.shapes.RECTANGLE, {{ x:0.4, y:y+0.02, w:0.08, h:rowH-0.08, fill:{{color:b.color}}, line:{{color:b.color}} }});
+    s.addText(clip(b.name, 16), {{ x:0.6, y:y+0.02, w:1.7, h:rowH-0.08, fontSize:11, bold:true, color:NAVY, valign:'middle', margin:0 }});
+    const q = b.example_question ? '\u201C' + clip(b.example_question, 60) + '\u201D' : clip(b.top_issue, 48);
+    s.addText(q, {{ x:2.35, y:y+0.02, w:5.95, h:rowH-0.08, fontSize:10, color:DARK_GREY, italic:true, valign:'middle', margin:0 }});
+    s.addText('(' + clip(b.top_issue, 22) + ')', {{ x:8.35, y:y+0.02, w:1.2, h:rowH-0.08, fontSize:8, color:MID_GREY, align:'right', valign:'middle', margin:0 }});
+  }});
+
+  s.addShape(pres.shapes.RECTANGLE, {{ x:0.4, y:4.5, w:9.2, h:0.72, fill:{{color:'F0F9FF'}}, line:{{color:'BAE6FD', pt:1}} }});
+  s.addText(N.by_branch_question_insight || '', {{ x:0.55, y:4.55, w:9.0, h:0.62, fontSize:11, color:DARK_GREY, italic:true, wrap:true }});
+}})();
+
 // ── SLIDE 4 — What customers actually asked ─────────────────────────────────
 (function() {{
   const s = pres.addSlide();
@@ -443,6 +472,25 @@ def main():
 
     print("Loading data...", file=sys.stderr)
     rows = load_data(args)
+    # Robustness: if the whole {rows, date_label} wrapper leaked through
+    # instead of just the array, dig the real rows out of it.
+    if isinstance(rows, dict):
+        if args.date_label is None and isinstance(rows.get("date_label"), str):
+            args.date_label = rows.get("date_label")
+        rows = rows.get("rows", [])
+    # keep only real ticket entries (objects/lists), drop stray strings
+    rows = [r for r in rows if isinstance(r, (dict, list))]
+
+    # Focus on ON-ROAD questions only. Claude marks pre-pickup requests
+    # (online check-in, after-hours pickup, booking changes, etc.) as EXCLUDE.
+    def _is_excluded(r):
+        raw = r.get("issue") if isinstance(r, dict) else (r[1] if len(r) > 1 else "")
+        return split_issue(raw)[0].strip().upper().startswith("EXCLUDE")
+    before = len(rows)
+    rows = [r for r in rows if not _is_excluded(r)]
+    dropped = before - len(rows)
+    if dropped:
+        print(f"  Excluded {dropped} pre-pickup / not-on-road requests", file=sys.stderr)
     print(f"  Loaded {len(rows)} rows", file=sys.stderr)
 
     print("Calculating statistics...", file=sys.stderr)
@@ -457,6 +505,7 @@ def main():
             "cover_insight": f"{stats['total']} information requests this period, led by {stats['top_issue_overall']['name']}.",
             "by_category_insight": "Category ranking highlights the questions customers ask most often.",
             "by_branch_insight": "Request volume varies across branches, pointing to where support is most needed.",
+            "by_branch_question_insight": "Each branch's most-asked question shows where location-specific guidance would help most.",
             "asked_insight": "The specific questions reveal where wording and instructions could be clearer.",
             "training_priority": f"Focus next month's training on {stats['top_issue_overall']['name']}.",
             "training_recommendations": [
