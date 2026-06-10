@@ -120,20 +120,17 @@ def generate_america():
 @app.route("/generate-info-requests", methods=["POST"])
 def generate_info_requests():
     """
-    Older info-request deck endpoint.
+    Information-request trends deck (the one being actively built).
 
-    This expects slide-ready JSON from Make/Claude, for example:
-
+    Expects rows-based JSON from Make:
     {
-      "date_label": "Previous Month",
-      "slides": [
-        {
-          "slide_number": 1,
-          "title": "Las Vegas Top 3 Trends",
-          "bullets": ["Trend 1: ...", "Trend 2: ..."]
-        }
-      ]
+      "rows": [
+        {"branch": "...", "issue": "Category :: specific question", "subject": "..."}
+      ],
+      "date_label": ""
     }
+
+    An empty date_label produces a date-less deck (no month shown anywhere).
     """
 
     data = request.get_json()
@@ -141,14 +138,16 @@ def generate_info_requests():
     if not data:
         return jsonify({"error": "No JSON body received"}), 400
 
-    date_label = data.get("date_label", "Previous Month")
+    rows = data.get("rows", [])
+    date_label = data.get("date_label", "")
+    api_key = data.get("api_key", os.environ.get("ANTHROPIC_API_KEY"))
 
     return run_deck_generator(
         script_name="generate_info_request_deck.py",
-        data=data,
+        data=rows,
         output_filename="info_request_report.pptx",
         date_label=date_label,
-        api_key=None,
+        api_key=api_key,
     )
 
 
