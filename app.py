@@ -1,110 +1,207 @@
+```python
 from flask import Flask, request, jsonify, send_file
-import json, os, subprocess, tempfile, sys
+import json
+import os
+import subprocess
+import tempfile
+import sys
 
 app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-@app.route('/generate', methods=['POST'])
+
+def run_deck_generator(script_name, data, output_filename, date_label="This Period", api_key=None):
+    """
+    Shared helper for all deck routes.
+    Saves request JSON to a temp file, runs the selected generator script,
+    then returns the generated PowerPoint file.
+    """
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        json.dump(data, f)
+        data_path = f.name
+
+    output_path = tempfile.mktemp(suffix=".pptx")
+
+    command = [
+        sys.executable,
+        script_name,
+        "--data",
+        data_path,
+        "--output",
+        output_path,
+        "--date-label",
+        date_label,
+    ]
+
+    if api_key:
+        command.extend(["--api-key", api_key])
+
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        cwd=BASE_DIR,
+        env={**os.environ, "NODE_PATH": os.path.join(BASE_DIR, "node_modules")},
+    )
+
+    os.unlink(data_path)
+
+    if result.returncode != 0:
+        return jsonify({"error": result.stderr + result.stdout}), 500
+
+    return send_file(
+        output_path,
+        as_attachment=True,
+        download_name=output_filename,
+        mimetype="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    )
+
+
+@app.route("/generate", methods=["POST"])
 def generate():
     data = request.get_json()
-    rows = data.get('rows', [])
-    date_label = data.get('date_label', 'This Period')
-    api_key = data.get('api_key', os.environ.get('ANTHROPIC_API_KEY'))
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-        json.dump(rows, f)
-        data_path = f.name
-    output_path = tempfile.mktemp(suffix='.pptx')
-    result = subprocess.run([
-        sys.executable, 'generate_aunz_deck.py',
-        '--data', data_path,
-        '--output', output_path,
-        '--date-label', date_label,
-        '--api-key', api_key
-    ], capture_output=True, text=True, cwd=BASE_DIR,
-       env={**os.environ, 'NODE_PATH': os.path.join(BASE_DIR, 'node_modules')})
-    os.unlink(data_path)
-    if result.returncode != 0:
-        return jsonify({'error': result.stderr + result.stdout}), 500
-    return send_file(output_path, as_attachment=True,
-                     download_name='aunz_refund_report.pptx',
-                     mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation')
 
-@app.route('/generate-nz', methods=['POST'])
+    if not data:
+        return jsonify({"error": "No JSON body received"}), 400
+
+    rows = data.get("rows", [])
+    date_label = data.get("date_label", "This Period")
+    api_key = data.get("api_key", os.environ.get("ANTHROPIC_API_KEY"))
+
+    return run_deck_generator(
+        script_name="generate_aunz_deck.py",
+        data=rows,
+        output_filename="aunz_refund_report.pptx",
+        date_label=date_label,
+        api_key=api_key,
+    )
+
+
+@app.route("/generate-nz", methods=["POST"])
 def generate_nz():
     data = request.get_json()
-    rows = data.get('rows', [])
-    date_label = data.get('date_label', 'This Period')
-    api_key = data.get('api_key', os.environ.get('ANTHROPIC_API_KEY'))
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-        json.dump(rows, f)
-        data_path = f.name
-    output_path = tempfile.mktemp(suffix='.pptx')
-    result = subprocess.run([
-        sys.executable, 'generate_nz_deck.py',
-        '--data', data_path,
-        '--output', output_path,
-        '--date-label', date_label,
-        '--api-key', api_key
-    ], capture_output=True, text=True, cwd=BASE_DIR,
-       env={**os.environ, 'NODE_PATH': os.path.join(BASE_DIR, 'node_modules')})
-    os.unlink(data_path)
-    if result.returncode != 0:
-        return jsonify({'error': result.stderr + result.stdout}), 500
-    return send_file(output_path, as_attachment=True,
-                     download_name='nz_refund_report.pptx',
-                     mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation')
 
-@app.route('/generate-america', methods=['POST'])
+    if not data:
+        return jsonify({"error": "No JSON body received"}), 400
+
+    rows = data.get("rows", [])
+    date_label = data.get("date_label", "This Period")
+    api_key = data.get("api_key", os.environ.get("ANTHROPIC_API_KEY"))
+
+    return run_deck_generator(
+        script_name="generate_nz_deck.py",
+        data=rows,
+        output_filename="nz_refund_report.pptx",
+        date_label=date_label,
+        api_key=api_key,
+    )
+
+
+@app.route("/generate-america", methods=["POST"])
 def generate_america():
     data = request.get_json()
-    rows = data.get('rows', [])
-    date_label = data.get('date_label', 'This Period')
-    api_key = data.get('api_key', os.environ.get('ANTHROPIC_API_KEY'))
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-        json.dump(rows, f)
-        data_path = f.name
-    output_path = tempfile.mktemp(suffix='.pptx')
-    result = subprocess.run([
-        sys.executable, 'generate_america_deck.py',
-        '--data', data_path,
-        '--output', output_path,
-        '--date-label', date_label,
-        '--api-key', api_key
-    ], capture_output=True, text=True, cwd=BASE_DIR,
-       env={**os.environ, 'NODE_PATH': os.path.join(BASE_DIR, 'node_modules')})
-    os.unlink(data_path)
-    if result.returncode != 0:
-        return jsonify({'error': result.stderr + result.stdout}), 500
-    return send_file(output_path, as_attachment=True,
-                     download_name='america_refund_report.pptx',
-                     mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation')
-@app.route('/generate-info-requests', methods=['POST'])
-def generate_info_requests():
-    data = request.get_json()
-    rows = data.get('rows', [])
-    date_label = data.get('date_label', 'This Period')
-    api_key = data.get('api_key', os.environ.get('ANTHROPIC_API_KEY'))
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-        json.dump(rows, f)
-        data_path = f.name
-    output_path = tempfile.mktemp(suffix='.pptx')
-    result = subprocess.run([
-        sys.executable, 'generate_info_request_deck.py',
-        '--data', data_path,
-        '--output', output_path,
-        '--date-label', date_label,
-        '--api-key', api_key
-    ], capture_output=True, text=True, cwd=BASE_DIR,
-       env={**os.environ, 'NODE_PATH': os.path.join(BASE_DIR, 'node_modules')})
-    os.unlink(data_path)
-    if result.returncode != 0:
-        return jsonify({'error': result.stderr + result.stdout}), 500
-    return send_file(output_path, as_attachment=True,
-                     download_name='info_request_report.pptx',
-                     mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation')
-@app.route('/health', methods=['GET'])
-def health():
-    return jsonify({'status': 'ok'})
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    if not data:
+        return jsonify({"error": "No JSON body received"}), 400
+
+    rows = data.get("rows", [])
+    date_label = data.get("date_label", "This Period")
+    api_key = data.get("api_key", os.environ.get("ANTHROPIC_API_KEY"))
+
+    return run_deck_generator(
+        script_name="generate_america_deck.py",
+        data=rows,
+        output_filename="america_refund_report.pptx",
+        date_label=date_label,
+        api_key=api_key,
+    )
+
+
+@app.route("/generate-info-requests", methods=["POST"])
+def generate_info_requests():
+    """
+    Older info-request deck endpoint.
+
+    This expects slide-ready JSON from Make/Claude, for example:
+
+    {
+      "date_label": "Previous Month",
+      "slides": [
+        {
+          "slide_number": 1,
+          "title": "Las Vegas Top 3 Trends",
+          "bullets": ["Trend 1: ...", "Trend 2: ..."]
+        }
+      ]
+    }
+    """
+
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "No JSON body received"}), 400
+
+    date_label = data.get("date_label", "Previous Month")
+
+    return run_deck_generator(
+        script_name="generate_info_request_deck.py",
+        data=data,
+        output_filename="info_request_report.pptx",
+        date_label=date_label,
+        api_key=None,
+    )
+
+
+@app.route("/generate-us-info-trends", methods=["POST"])
+def generate_us_info_trends():
+    """
+    New More Information Trends deck endpoint.
+
+    This is the one you should use in Make for the new US More Information deck.
+
+    Make HTTP URL:
+    https://ta-refund-deck.onrender.com/generate-us-info-trends
+
+    Expected JSON body:
+
+    {
+      "date_label": "Previous Month",
+      "slides": [
+        {
+          "slide_number": 1,
+          "title": "Las Vegas Top 3 Trends",
+          "bullets": [
+            "Trend 1: ...",
+            "Trend 2: ...",
+            "Trend 3: ..."
+          ]
+        }
+      ]
+    }
+    """
+
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "No JSON body received"}), 400
+
+    date_label = data.get("date_label", "Previous Month")
+
+    return run_deck_generator(
+        script_name="generate_us_info_trends_deck.py",
+        data=data,
+        output_filename="us_more_information_trends_deck.pptx",
+        date_label=date_label,
+        api_key=None,
+    )
+
+
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({"status": "ok"})
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+```
