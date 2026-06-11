@@ -179,56 +179,71 @@ pres.title = 'Travellers Autobarn \\u2014 Accident Report (' + REGION + ')';
 // ── Summary / breakdown slide ────────────────────────────────────────────────
 (function() {{
   const s = pres.addSlide();
-  s.background = {{ color: LIGHT_GREY }};
-  s.addShape(pres.shapes.RECTANGLE, {{ x:0, y:0, w:10, h:0.08, fill:{{color:NAVY}}, line:{{color:NAVY}} }});
-  s.addText('ACCIDENT BREAKDOWN', {{ x:0.4, y:0.15, w:9.2, h:0.4, fontSize:18, bold:true, color:NAVY }});
-  s.addText(REGION + DSUF, {{ x:0.4, y:0.52, w:9.2, h:0.25, fontSize:10, color:MID_GREY, italic:true }});
+  s.background = {{ color: NAVY }};
 
-  // Total callout box
-  s.addShape(pres.shapes.RECTANGLE, {{ x:7.4, y:0.82, w:2.2, h:1.1, fill:{{color:NAVY}}, line:{{color:NAVY}}, shadow:shadow() }});
-  s.addText(TOTAL.toString(), {{ x:7.4, y:0.88, w:2.2, h:0.6, fontSize:36, bold:true, color:WHITE, align:'center', margin:0, valign:'middle' }});
-  s.addText('TOTAL ACCIDENTS', {{ x:7.4, y:1.5, w:2.2, h:0.28, fontSize:8, color:'94A3B8', align:'center', margin:0 }});
+  // Header
+  s.addText('TRAVELLERS AUTOBARN', {{ x:0.5, y:0.18, w:7, h:0.25, fontSize:9, bold:true, color:'94A3B8', charSpacing:3 }});
+  s.addText('Accident Breakdown', {{ x:0.5, y:0.42, w:7, h:0.55, fontSize:26, bold:true, color:WHITE }});
+  s.addText(REGION + DSUF, {{ x:0.5, y:0.94, w:7, h:0.28, fontSize:10, color:'64748B', italic:true }});
 
-  // Bar chart — manual horizontal bars
-  const barAreaX = 0.4;
-  const barAreaY = 0.82;
-  const barAreaW = 6.8;   // total width available for label + bar + count
-  const labelW   = 2.5;
-  const countW   = 0.5;
-  const barMaxW  = barAreaW - labelW - countW - 0.15;
-  const barH     = 0.32;
-  const rowGap   = 0.10;
-  const rowH     = barH + rowGap;
+  // Total callout — top right
+  s.addShape(pres.shapes.RECTANGLE, {{ x:7.8, y:0.18, w:1.8, h:1.0, fill:{{color:'1E293B'}}, line:{{color:'334155'}}, rounding:0.12 }});
+  s.addText(TOTAL.toString(), {{ x:7.8, y:0.22, w:1.8, h:0.6, fontSize:34, bold:true, color:ORANGE, align:'center', margin:0, valign:'middle' }});
+  s.addText('TOTAL', {{ x:7.8, y:0.84, w:1.8, h:0.24, fontSize:8, color:'94A3B8', align:'center', charSpacing:2, margin:0 }});
 
-  CATEGORY_BARS.forEach((item, i) => {{
-    const y = barAreaY + i * rowH;
-    const barW = Math.max(0.05, barMaxW * item.pct / 100);
+  // ── Card grid ──
+  // Top 4 categories get big cards (2x2 grid), rest get small bar rows below
+  const topCats = CATEGORY_BARS.slice(0, 4);
+  const tailCats = CATEGORY_BARS.slice(4);
 
-    // label
-    s.addText(item.label, {{
-      x: barAreaX, y: y, w: labelW, h: barH,
-      fontSize: 9, color: DARK_GREY, valign: 'middle', align: 'right', margin: 0
-    }});
+  const cardW = 2.15, cardH = 1.05;
+  const cardY = 1.38;
+  const cardGap = 0.12;
+  const cardStartX = 0.4;
 
-    // bar background (track)
-    s.addShape(pres.shapes.RECTANGLE, {{
-      x: barAreaX + labelW + 0.08, y: y + 0.04, w: barMaxW, h: barH - 0.08,
-      fill:{{color:'E2E8F0'}}, line:{{color:'E2E8F0'}}
-    }});
+  topCats.forEach((item, i) => {{
+    const cx = cardStartX + i * (cardW + cardGap);
+    const isTop = (item.pct === 100);
+    const bgColor = isTop ? ORANGE : '1E293B';
+    const numColor = WHITE;
+    const lblColor = isTop ? 'FED7AA' : '94A3B8';
 
-    // filled bar — orange for highest, navy for rest
-    const barColor = (item.pct === 100) ? ORANGE : '334155';
-    s.addShape(pres.shapes.RECTANGLE, {{
-      x: barAreaX + labelW + 0.08, y: y + 0.04, w: barW, h: barH - 0.08,
-      fill:{{color:barColor}}, line:{{color:barColor}}
-    }});
-
-    // count label
-    s.addText(item.count.toString(), {{
-      x: barAreaX + labelW + 0.08 + barMaxW + 0.06, y: y, w: countW, h: barH,
-      fontSize: 10, bold: true, color: DARK_GREY, valign: 'middle', margin: 0
-    }});
+    s.addShape(pres.shapes.RECTANGLE, {{ x:cx, y:cardY, w:cardW, h:cardH, fill:{{color:bgColor}}, line:{{color:isTop ? ORANGE : '334155'}} }});
+    s.addText(item.count.toString(), {{ x:cx, y:cardY+0.08, w:cardW, h:0.55, fontSize:30, bold:true, color:numColor, align:'center', margin:0, valign:'middle' }});
+    s.addText(item.label, {{ x:cx+0.1, y:cardY+0.65, w:cardW-0.2, h:0.32, fontSize:9, color:lblColor, align:'center', margin:0, wrap:true }});
   }});
+
+  // ── Tail bars (smaller categories) ──
+  if (tailCats.length > 0) {{
+    const tailY = cardY + cardH + 0.22;
+    const tailLabelW = 1.9;
+    const tailBarMaxW = 7.3 - tailLabelW - 0.5;
+    const tailRowH = 0.38;
+
+    s.addText('OTHER CATEGORIES', {{ x:0.4, y:tailY - 0.28, w:5, h:0.22, fontSize:8, color:'475569', charSpacing:2, bold:true }});
+
+    tailCats.forEach((item, i) => {{
+      const ty = tailY + i * tailRowH;
+      const barW = Math.max(0.05, tailBarMaxW * item.pct / 100);
+
+      s.addText(item.label, {{
+        x:0.4, y:ty, w:tailLabelW, h:0.28,
+        fontSize:9, color:'94A3B8', valign:'middle', align:'right', margin:0
+      }});
+      s.addShape(pres.shapes.RECTANGLE, {{
+        x:0.4+tailLabelW+0.1, y:ty+0.06, w:tailBarMaxW, h:0.16,
+        fill:{{color:'1E293B'}}, line:{{color:'334155'}}
+      }});
+      s.addShape(pres.shapes.RECTANGLE, {{
+        x:0.4+tailLabelW+0.1, y:ty+0.06, w:barW, h:0.16,
+        fill:{{color:ORANGE}}, line:{{color:ORANGE}}
+      }});
+      s.addText(item.count.toString(), {{
+        x:0.4+tailLabelW+0.1+tailBarMaxW+0.08, y:ty, w:0.4, h:0.28,
+        fontSize:10, bold:true, color:WHITE, valign:'middle', margin:0
+      }});
+    }});
+  }}
 }})();
 
 // ── One slide per accident ─────────────────────────────────────────────────
