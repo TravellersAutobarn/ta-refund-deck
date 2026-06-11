@@ -244,8 +244,35 @@ async function buildDeck() {{
     s.addText('DAMAGE PHOTO', {{ x:0.4, y:photoY-0.28, w:4, h:0.25, fontSize:9, bold:true, color:MID_GREY, charSpacing:1.5 }});
     const photo = photos[idx];
     if (photo) {{
+      // Calculate fitted dimensions preserving aspect ratio
+      let imgX = 0.4, imgY = photoY, imgW = 9.2, imgH = photoH;
+      try {{
+        const b64 = photo.split(',')[1];
+        const buf = Buffer.from(b64, 'base64');
+        let natW = 0, natH = 0;
+        if (buf[0] === 0x89 && buf[1] === 0x50) {{
+          natW = buf.readUInt32BE(16); natH = buf.readUInt32BE(20);
+        }} else {{
+          let i = 0;
+          while (i < buf.length - 8) {{
+            if (buf[i] === 0xFF) {{
+              const mk = buf[i+1];
+              if (mk >= 0xC0 && mk <= 0xC3) {{ natW = buf.readUInt16BE(i+7); natH = buf.readUInt16BE(i+5); break; }}
+              if (mk === 0xD8 || mk === 0xD9) {{ i += 2; continue; }}
+              i += 2 + buf.readUInt16BE(i+2);
+            }} else {{ i++; }}
+          }}
+        }}
+        if (natW > 0 && natH > 0) {{
+          const scale = Math.min(9.2 / natW, photoH / natH);
+          imgW = natW * scale;
+          imgH = natH * scale;
+          imgX = 0.4 + (9.2 - imgW) / 2;
+          imgY = photoY + (photoH - imgH) / 2;
+        }}
+      }} catch(e) {{}}
       s.addShape(pres.shapes.RECTANGLE, {{ x:0.4, y:photoY, w:9.2, h:photoH, fill:{{color:'EEF2F7'}}, line:{{color:BORDER, pt:1}} }});
-      s.addImage({{ data:photo, x:0.4, y:photoY, w:9.2, h:photoH, sizing:{{ type:'contain', w:9.2, h:photoH }} }});
+      s.addImage({{ data:photo, x:imgX, y:imgY, w:imgW, h:imgH }});
     }} else {{
       s.addShape(pres.shapes.RECTANGLE, {{ x:0.4, y:photoY, w:9.2, h:photoH, fill:{{color:'F1F5F9'}}, line:{{color:'CBD5E1', pt:1, dashType:'dash'}} }});
       s.addText('Photo of damage not supplied', {{ x:0.4, y:photoY, w:9.2, h:photoH, fontSize:13, color:'94A3B8', align:'center', valign:'middle', italic:true }});
