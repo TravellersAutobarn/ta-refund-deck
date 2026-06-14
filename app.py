@@ -5,6 +5,8 @@ import subprocess
 import tempfile
 import sys
 
+from generate_praise_deck import generate as generate_praise
+
 app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -191,6 +193,41 @@ def generate_us_info_trends():
     )
 
 
+@app.route("/generate-praise-deck", methods=["POST"])
+def praise_deck():
+    """
+    Wall of Praise deck. Splits tickets into two decks by Country.
+    Expects: { "date_label": "June 2026",
+               "praise": [ {"ticket_number": "...", "branch": "...", "date": "...", "country": "..."} ] }
+    Returns a zip containing praise_america.pptx and/or praise_aunz.pptx.
+    """
+    import io
+    import zipfile
+
+    payload = request.get_json(force=True)
+    if not payload:
+        return jsonify({"error": "No JSON body received"}), 400
+
+    outdir = tempfile.mkdtemp(prefix="praise_")
+    written = generate_praise(payload, outdir)
+
+    if not written:
+        return jsonify({"error": "No praise items matched a known country"}), 400
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w") as zf:
+        for path in written:
+            zf.write(path, os.path.basename(path))
+    zip_buffer.seek(0)
+
+    return send_file(
+        zip_buffer,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name="praise_decks.zip",
+    )
+
+
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
@@ -198,16 +235,3 @@ def health():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
-from generate_praise_deck import generate as generate_praise
-
-@app.route("/generate-praise-deck", methods=["POST"])
-def praise_deck():
-    payload = request.get_json(force=True)
-    outdir = "/tmp/praise_out"
-    written = generate_praise(payload, outdir)
-    if not written:
-        return jsonify({"error": "No praise items matched a known country"}), 400
-    # Return the first file, or zip both — see note below
-    return send_file(written[0], as_attachment=True,
-                     download_name=os.path.basename(written[0]))
