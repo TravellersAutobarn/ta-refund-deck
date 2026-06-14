@@ -1,3 +1,4 @@
 flask
 anthropic
 Pillow
+python-pptx
