@@ -198,3 +198,16 @@ def health():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
+from generate_praise_deck import generate as generate_praise
+
+@app.route("/generate-praise-deck", methods=["POST"])
+def praise_deck():
+    payload = request.get_json(force=True)
+    outdir = "/tmp/praise_out"
+    written = generate_praise(payload, outdir)
+    if not written:
+        return jsonify({"error": "No praise items matched a known country"}), 400
+    # Return the first file, or zip both — see note below
+    return send_file(written[0], as_attachment=True,
+                     download_name=os.path.basename(written[0]))
