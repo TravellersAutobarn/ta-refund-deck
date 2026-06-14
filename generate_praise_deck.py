@@ -72,15 +72,35 @@ def _set_fill(shape, hex_str):
     shape.line.fill.background()
 
 
+def _normalise(value):
+    """Lowercase, strip, and turn underscores/hyphens into spaces."""
+    if not value:
+        return ""
+    return value.strip().lower().replace("_", " ").replace("-", " ")
+
+
 def _region_for_country(country):
-    if not country:
-        return None
-    c = country.strip().lower()
-    if c in ("united states", "usa", "us", "united states of america"):
+    c = _normalise(country)
+    if c in ("united states", "usa", "us", "united states of america", "america"):
         return "america"
-    if c in ("australia", "new zealand", "aus", "nz"):
+    if c in ("australia", "new zealand", "aus", "nz", "aotearoa"):
         return "aunz"
     return None
+
+
+def _prettify_branch(branch):
+    """los_angeles -> Los Angeles, new_zealand -> New Zealand, etc."""
+    if not branch:
+        return ""
+    return " ".join(w.capitalize() for w in branch.strip().replace("_", " ").replace("-", " ").split())
+
+
+def _clean_date(date):
+    """Drop a trailing time portion like '10:45 AM' if present."""
+    if not date:
+        return ""
+    import re
+    return re.sub(r"\s+\d{1,2}:\d{2}\s*(am|pm)?\s*$", "", date.strip(), flags=re.IGNORECASE)
 
 
 def _add_slide(prs, item, palette, region):
@@ -145,8 +165,8 @@ def _add_slide(prs, item, palette, region):
 
     # Footer detail row: Ticket / Branch / Date
     ticket = str(item.get("ticket_number", "") or "").strip()
-    branch = str(item.get("branch", "") or "").strip()
-    date = str(item.get("date", "") or "").strip()
+    branch = _prettify_branch(str(item.get("branch", "") or ""))
+    date = _clean_date(str(item.get("date", "") or ""))
 
     foot = slide.shapes.add_textbox(Inches(1.1), Inches(6.0), Inches(11.13), Inches(1.0))
     ftf = foot.text_frame
