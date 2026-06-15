@@ -7,6 +7,7 @@ import sys
 
 from generate_praise_deck import generate_region as generate_praise_region
 from generate_day1_deck import generate_region as generate_day1_region
+from generate_wwyd_deck import generate_region as generate_wwyd_region
 
 app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -272,6 +273,53 @@ def day1_deck_aunz():
 def day1_deck_america():
     """Day 1 issues deck for the USA. Returns day1_america.pptx."""
     return _run_day1_region("america", "day1_america.pptx")
+
+
+def _run_wwyd_region(region, filename):
+    """Build one region's What Would You Do? deck, or 400 if no scenario matches.
+    Accepts Claude's raw JSON output as the body, tolerating markdown fences."""
+    import traceback
+    import json as _json
+    import re as _re
+    try:
+        raw = request.get_data(as_text=True) or ""
+        cleaned = raw.strip()
+        # Strip ```json ... ``` fences if Claude wrapped its output
+        cleaned = _re.sub(r"^```[a-zA-Z]*", "", cleaned).strip()
+        cleaned = _re.sub(r"```$", "", cleaned).strip()
+        try:
+            payload = _json.loads(cleaned)
+        except Exception:
+            payload = request.get_json(force=True, silent=True) or {}
+        if not payload:
+            return jsonify({"error": "No JSON body received"}), 400
+
+        outdir = tempfile.mkdtemp(prefix="wwyd_")
+        path = generate_wwyd_region(payload, outdir, region)
+
+        if not path:
+            return jsonify({"error": "No scenario matched region '%s'" % region}), 400
+
+        return send_file(
+            path,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        )
+    except Exception as e:
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@app.route("/generate-wwyd-deck/aunz", methods=["POST"])
+def wwyd_deck_aunz():
+    """What Would You Do? deck for Australia & New Zealand. Returns wwyd_aunz.pptx."""
+    return _run_wwyd_region("aunz", "wwyd_aunz.pptx")
+
+
+@app.route("/generate-wwyd-deck/america", methods=["POST"])
+def wwyd_deck_america():
+    """What Would You Do? deck for the USA. Returns wwyd_america.pptx."""
+    return _run_wwyd_region("america", "wwyd_america.pptx")
 
 
 @app.route("/health", methods=["GET"])
