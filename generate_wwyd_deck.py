@@ -238,12 +238,12 @@ def _add_slide(prs, item, palette, region):
 
     if prevention or handling:
         if prevention:
-            _section("How could we prevent this?", prevention)
+            _section("What could we have checked or prepared?", prevention)
         if handling:
             # small gap before the second section
             gap = ctf.add_paragraph()
             gap.space_after = Pt(2)
-            _section("How would you handle the customer?", handling)
+            _section("What should we cover at handover?", handling)
     elif fallback:
         _section("What would you do?", fallback)
 
@@ -284,11 +284,17 @@ def _add_slide(prs, item, palette, region):
             rs.font.name = "Calibri"
             rs.font.color.rgb = _rgb(palette["ink"])
 
-    # Manager-only "good practice" answer -> speaker notes
+    # Manager-only notes -> speaker notes
     answer = str(item.get("facilitator_answer", "") or "").strip()
-    if answer:
+    black_swan = str(item.get("black_swan", "") or "").strip()
+    if answer or black_swan:
+        parts = ["FACILITATOR NOTES (not shown on slide)"]
+        if answer:
+            parts.append("\nSuggested good practice:\n" + answer)
+        if black_swan:
+            parts.append("\nBlack swan — the rare, high-impact version:\n" + black_swan)
         notes = slide.notes_slide.notes_text_frame
-        notes.text = "FACILITATOR NOTES (not shown on slide)\n\nSuggested good practice:\n" + answer
+        notes.text = "\n".join(parts)
 
     return slide
 
