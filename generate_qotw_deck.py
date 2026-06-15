@@ -141,7 +141,8 @@ def _add_lightbulb(slide, color):
     base.shadow.inherit = False
 
 
-def _add_slide(prs, item, palette, region):
+def _frame(prs, palette, region, banner_text):
+    """Shared slide chrome: background, lightbulb, header banner. Returns the slide."""
     blank = prs.slide_layouts[6]
     slide = prs.slides.add_slide(blank)
 
@@ -151,7 +152,6 @@ def _add_slide(prs, item, palette, region):
 
     _add_lightbulb(slide, palette["mark"])
 
-    # Header banner, top-right
     band = slide.shapes.add_shape(
         MSO_SHAPE.ROUNDED_RECTANGLE, Inches(5.0), Inches(0.55), Inches(7.9), Inches(0.95)
     )
@@ -165,13 +165,97 @@ def _add_slide(prs, item, palette, region):
     bp = btf.paragraphs[0]
     bp.alignment = PP_ALIGN.CENTER
     br = bp.add_run()
-    br.text = REGION_TITLES.get(region, "Question of the Week")
+    br.text = banner_text
     br.font.size = Pt(19)
     br.font.bold = True
     br.font.name = "Calibri"
     br.font.color.rgb = _rgb(palette["ink"])
+    return slide
 
-    # White card: question, answer, talking point
+
+def _footer(slide, item, palette):
+    kb_topic = str(item.get("kb_topic", "") or "").strip()
+    times = item.get("times_asked")
+    foot_bits = []
+    if kb_topic:
+        foot_bits.append(("KB topic", kb_topic))
+    if times not in (None, "", 0, "0"):
+        foot_bits.append(("Asked this week", str(times) + " times"))
+    if not foot_bits:
+        return
+    foot = slide.shapes.add_textbox(Inches(1.1), Inches(6.6), Inches(11.13), Inches(0.7))
+    ftf = foot.text_frame
+    ftf.word_wrap = True
+    fp = ftf.paragraphs[0]
+    fp.alignment = PP_ALIGN.CENTER
+    for i, (label, value) in enumerate(foot_bits):
+        rl = fp.add_run()
+        rl.text = f"{label}: "
+        rl.font.size = Pt(14)
+        rl.font.bold = True
+        rl.font.name = "Calibri"
+        rl.font.color.rgb = _rgb(palette["ink"])
+        rv = fp.add_run()
+        rv.text = value
+        rv.font.size = Pt(14)
+        rv.font.name = "Calibri"
+        rv.font.color.rgb = _rgb(palette["ink"])
+        if i < len(foot_bits) - 1:
+            rs = fp.add_run()
+            rs.text = "      •      "
+            rs.font.size = Pt(14)
+            rs.font.bold = True
+            rs.font.name = "Calibri"
+            rs.font.color.rgb = _rgb(palette["ink"])
+
+
+def _add_question_slide(prs, item, palette, region):
+    """Slide 1: pose the question only — staff think/guess before the reveal."""
+    slide = _frame(prs, palette, region, REGION_TITLES.get(region, "Question of the Week"))
+    question = str(item.get("question", "") or "").strip()
+
+    card = slide.shapes.add_shape(
+        MSO_SHAPE.ROUNDED_RECTANGLE, Inches(1.1), Inches(1.95), Inches(11.13), Inches(4.5)
+    )
+    _set_fill(card, "FFFFFF")
+    card.shadow.inherit = False
+    ctf = card.text_frame
+    ctf.word_wrap = True
+    ctf.vertical_anchor = MSO_ANCHOR.MIDDLE
+    ctf.margin_left = Inches(0.7)
+    ctf.margin_right = Inches(0.7)
+
+    qp = ctf.paragraphs[0]
+    qp.alignment = PP_ALIGN.CENTER
+    qr = qp.add_run()
+    qr.text = question
+    qr.font.size = Pt(26)
+    qr.font.bold = True
+    qr.font.name = "Calibri"
+    qr.font.color.rgb = _rgb(palette["bg"])
+    qp.space_after = Pt(18)
+
+    pp = ctf.add_paragraph()
+    pp.alignment = PP_ALIGN.CENTER
+    pr = pp.add_run()
+    pr.text = "How would you explain this to a customer?"
+    pr.font.size = Pt(16)
+    pr.font.italic = True
+    pr.font.name = "Calibri"
+    pr.font.color.rgb = _rgb("6B6B7B")
+
+    _footer(slide, item, palette)
+    return slide
+
+
+def _add_answer_slide(prs, item, palette, region):
+    """Slide 2: the reveal — restate the question small, then the answer + talking point."""
+    slide = _frame(prs, palette, region, "The Answer — " + (
+        "USA" if region == "america" else "Australia & New Zealand"))
+    question = str(item.get("question", "") or "").strip()
+    steps = _coerce_steps(item.get("answer"))
+    talking = str(item.get("talking_point", "") or "").strip()
+
     card = slide.shapes.add_shape(
         MSO_SHAPE.ROUNDED_RECTANGLE, Inches(1.1), Inches(1.95), Inches(11.13), Inches(4.5)
     )
@@ -182,25 +266,19 @@ def _add_slide(prs, item, palette, region):
     ctf.vertical_anchor = MSO_ANCHOR.TOP
     ctf.margin_left = Inches(0.5)
     ctf.margin_right = Inches(0.5)
-    ctf.margin_top = Inches(0.4)
-    ctf.margin_bottom = Inches(0.3)
+    ctf.margin_top = Inches(0.35)
 
-    question = str(item.get("question", "") or "").strip()
-    steps = _coerce_steps(item.get("answer"))
-    talking = str(item.get("talking_point", "") or "").strip()
-
-    # The question (prominent)
+    # Restate the question small, for context
     qp = ctf.paragraphs[0]
     qp.alignment = PP_ALIGN.LEFT
     qr = qp.add_run()
     qr.text = "Q:  " + question
-    qr.font.size = Pt(19)
+    qr.font.size = Pt(15)
     qr.font.bold = True
     qr.font.name = "Calibri"
     qr.font.color.rgb = _rgb(palette["bg"])
-    qp.space_after = Pt(12)
+    qp.space_after = Pt(10)
 
-    # The answer label
     ap = ctf.add_paragraph()
     ap.alignment = PP_ALIGN.LEFT
     ar = ap.add_run()
@@ -211,7 +289,6 @@ def _add_slide(prs, item, palette, region):
     ar.font.color.rgb = _rgb("6B6B7B")
     ap.space_after = Pt(4)
 
-    # The answer body (paragraph or steps)
     multi = len(steps) > 1
     for s in steps:
         bp2 = ctf.add_paragraph()
@@ -223,7 +300,6 @@ def _add_slide(prs, item, palette, region):
         br2.font.color.rgb = _rgb("2B2D42")
         bp2.space_after = Pt(4)
 
-    # Talking point
     if talking:
         tp = ctf.add_paragraph()
         tp.alignment = PP_ALIGN.LEFT
@@ -241,42 +317,9 @@ def _add_slide(prs, item, palette, region):
         tv.font.name = "Calibri"
         tv.font.color.rgb = _rgb("3D3D4E")
 
-    # Footer: KB topic and how often it came up
-    kb_topic = str(item.get("kb_topic", "") or "").strip()
-    times = item.get("times_asked")
-    foot_bits = []
-    if kb_topic:
-        foot_bits.append(("KB topic", kb_topic))
-    if times not in (None, "", 0, "0"):
-        foot_bits.append(("Asked this week", str(times) + " times"))
+    _footer(slide, item, palette)
 
-    if foot_bits:
-        foot = slide.shapes.add_textbox(Inches(1.1), Inches(6.6), Inches(11.13), Inches(0.7))
-        ftf = foot.text_frame
-        ftf.word_wrap = True
-        fp = ftf.paragraphs[0]
-        fp.alignment = PP_ALIGN.CENTER
-        for i, (label, value) in enumerate(foot_bits):
-            rl = fp.add_run()
-            rl.text = f"{label}: "
-            rl.font.size = Pt(14)
-            rl.font.bold = True
-            rl.font.name = "Calibri"
-            rl.font.color.rgb = _rgb(palette["ink"])
-            rv = fp.add_run()
-            rv.text = value
-            rv.font.size = Pt(14)
-            rv.font.name = "Calibri"
-            rv.font.color.rgb = _rgb(palette["ink"])
-            if i < len(foot_bits) - 1:
-                rs = fp.add_run()
-                rs.text = "      •      "
-                rs.font.size = Pt(14)
-                rs.font.bold = True
-                rs.font.name = "Calibri"
-                rs.font.color.rgb = _rgb(palette["ink"])
-
-    # Manager QA reminder + any KB-check note -> speaker notes
+    # Manager QA reminder + any KB-check note -> speaker notes (on the answer slide)
     kb_check = str(item.get("kb_check", "") or "").strip()
     notes_parts = ["KB QA CHECK (not shown on slide)",
                    "\nVerify this answer matches the official KB / Retell article before Friday.",
@@ -284,7 +327,6 @@ def _add_slide(prs, item, palette, region):
     if kb_check:
         notes_parts.append("\nClaude's note:\n" + kb_check)
     slide.notes_slide.notes_text_frame.text = "\n".join(notes_parts)
-
     return slide
 
 
@@ -323,7 +365,8 @@ def _build_deck(items, region, date_label):
 
     for idx, item in enumerate(items):
         palette = PALETTES[idx % len(PALETTES)]
-        _add_slide(prs, item, palette, region)
+        _add_question_slide(prs, item, palette, region)
+        _add_answer_slide(prs, item, palette, region)
 
     return prs
 
