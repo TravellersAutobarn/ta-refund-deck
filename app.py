@@ -6,6 +6,7 @@ import tempfile
 import sys
 
 from generate_praise_deck import generate_region as generate_praise_region
+from generate_day1_deck import generate_region as generate_day1_region
 
 app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -231,6 +232,46 @@ def praise_deck_aunz():
 def praise_deck_america():
     """Wall of Praise deck for the USA. Returns praise_america.pptx."""
     return _run_praise_region("america", "praise_america.pptx")
+
+
+def _run_day1_region(region, filename):
+    """Build one region's Day 1 issues deck and return it as a single .pptx, or 400 if empty."""
+    import traceback
+    try:
+        payload = request.get_json(force=True)
+        if not payload:
+            return jsonify({"error": "No JSON body received"}), 400
+
+        outdir = tempfile.mkdtemp(prefix="day1_")
+        path = generate_day1_region(payload, outdir, region)
+
+        if not path:
+            return jsonify({
+                "error": "No Day 1 issue items matched region '%s'" % region,
+                "received_count": len(payload.get("praise", []) or [])
+                    if isinstance(payload.get("praise"), (list, tuple)) else 1,
+            }), 400
+
+        return send_file(
+            path,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        )
+    except Exception as e:
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+@app.route("/generate-day1-deck/aunz", methods=["POST"])
+def day1_deck_aunz():
+    """Day 1 issues deck for Australia & New Zealand. Returns day1_aunz.pptx."""
+    return _run_day1_region("aunz", "day1_aunz.pptx")
+
+
+@app.route("/generate-day1-deck/america", methods=["POST"])
+def day1_deck_america():
+    """Day 1 issues deck for the USA. Returns day1_america.pptx."""
+    return _run_day1_region("america", "day1_america.pptx")
 
 
 @app.route("/health", methods=["GET"])
