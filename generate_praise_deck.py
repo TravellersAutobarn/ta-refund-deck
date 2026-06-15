@@ -248,11 +248,47 @@ def _build_deck(items, region, date_label):
     return prs
 
 
+def _coerce_praise(praise):
+    """
+    Make.com sometimes serialises array items as JSON strings, or the whole
+    array as a single string. Normalise whatever arrives into a list of dicts.
+    """
+    # Whole praise value arrived as a string -> try to parse it into a list
+    if isinstance(praise, str):
+        try:
+            praise = json.loads(praise)
+        except (ValueError, TypeError):
+            return []
+
+    if not isinstance(praise, (list, tuple)):
+        return []
+
+    out = []
+    for item in praise:
+        # Each item arrived as a JSON string -> parse it into a dict
+        if isinstance(item, str):
+            try:
+                item = json.loads(item)
+            except (ValueError, TypeError):
+                continue
+        if isinstance(item, dict):
+            out.append(item)
+    return out
+
+
 def generate(payload, outdir):
     """Build both decks from a payload dict. Returns list of written paths."""
     os.makedirs(outdir, exist_ok=True)
+
+    # Payload itself may arrive as a JSON string
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except (ValueError, TypeError):
+            payload = {}
+
     date_label = payload.get("date_label") or datetime.now().strftime("%B %Y")
-    praise = payload.get("praise", []) or []
+    praise = _coerce_praise(payload.get("praise", []) or [])
 
     buckets = {"america": [], "aunz": []}
     for item in praise:
