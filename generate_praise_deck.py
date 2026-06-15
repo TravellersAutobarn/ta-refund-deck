@@ -293,6 +293,15 @@ def _coerce_praise(praise):
 
 def generate(payload, outdir):
     """Build both decks from a payload dict. Returns list of written paths."""
+    return [p for region in ("america", "aunz")
+            for p in [generate_region(payload, outdir, region)] if p]
+
+
+def generate_region(payload, outdir, region):
+    """
+    Build a single region's deck ('america' or 'aunz').
+    Returns the written path, or None if no praise items match that region.
+    """
     os.makedirs(outdir, exist_ok=True)
 
     # Payload itself may arrive as a JSON string
@@ -305,26 +314,15 @@ def generate(payload, outdir):
     date_label = payload.get("date_label") or datetime.now().strftime("%B %Y")
     praise = _coerce_praise(payload.get("praise", []) or [])
 
-    buckets = {"america": [], "aunz": []}
-    for item in praise:
-        region = _region_for_country(item.get("country"))
-        if region:
-            buckets[region].append(item)
+    items = [item for item in praise if _region_for_country(item.get("country")) == region]
+    if not items:
+        return None
 
-    written = []
-    filenames = {
-        "america": "praise_america.pptx",
-        "aunz": "praise_aunz.pptx",
-    }
-    for region, items in buckets.items():
-        if not items:
-            continue
-        prs = _build_deck(items, region, date_label)
-        path = os.path.join(outdir, filenames[region])
-        prs.save(path)
-        written.append(path)
-
-    return written
+    prs = _build_deck(items, region, date_label)
+    filenames = {"america": "praise_america.pptx", "aunz": "praise_aunz.pptx"}
+    path = os.path.join(outdir, filenames[region])
+    prs.save(path)
+    return path
 
 
 def main():
