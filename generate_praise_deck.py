@@ -96,11 +96,22 @@ def _prettify_branch(branch):
 
 
 def _clean_date(date):
-    """Drop a trailing time portion like '10:45 AM' if present."""
+    """Format the date nicely. Handles ISO 8601 (2026-05-29T00:45:25.000Z)
+    and strips a trailing time like '10:45 AM' from plain strings."""
     if not date:
         return ""
+    date = date.strip()
+
+    # Try ISO 8601 first
+    iso = date.replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(iso)
+        return dt.strftime("%-d %B %Y")
+    except (ValueError, TypeError):
+        pass
+
     import re
-    return re.sub(r"\s+\d{1,2}:\d{2}\s*(am|pm)?\s*$", "", date.strip(), flags=re.IGNORECASE)
+    return re.sub(r"\s+\d{1,2}:\d{2}\s*(am|pm)?\s*$", "", date, flags=re.IGNORECASE)
 
 
 def _add_slide(prs, item, palette, region):
@@ -259,6 +270,10 @@ def _coerce_praise(praise):
             praise = json.loads(praise)
         except (ValueError, TypeError):
             return []
+
+    # A single object instead of an array -> wrap it in a list
+    if isinstance(praise, dict):
+        praise = [praise]
 
     if not isinstance(praise, (list, tuple)):
         return []
