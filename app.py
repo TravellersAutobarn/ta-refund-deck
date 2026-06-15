@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import sys
 
-from generate_praise_deck import generate as generate_praise
+from generate_praise_deck import generate_region as generate_praise_region
 
 app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -193,39 +193,44 @@ def generate_us_info_trends():
     )
 
 
-@app.route("/generate-praise-deck", methods=["POST"])
-def praise_deck():
-    """
-    Wall of Praise deck. Splits tickets into two decks by Country.
-    Expects: { "date_label": "June 2026",
-               "praise": [ {"ticket_number": "...", "branch": "...", "date": "...", "country": "..."} ] }
-    Returns a zip containing praise_america.pptx and/or praise_aunz.pptx.
-    """
-    import io
-    import zipfile
+def _run_praise_region(region, filename):
+    """Build one region's praise deck and return it as a single .pptx, or 400 if empty."""
+    import traceback
+    try:
+        payload = request.get_json(force=True)
+        if not payload:
+            return jsonify({"error": "No JSON body received"}), 400
 
-    payload = request.get_json(force=True)
-    if not payload:
-        return jsonify({"error": "No JSON body received"}), 400
+        outdir = tempfile.mkdtemp(prefix="praise_")
+        path = generate_praise_region(payload, outdir, region)
 
-    outdir = tempfile.mkdtemp(prefix="praise_")
-    written = generate_praise(payload, outdir)
+        if not path:
+            return jsonify({
+                "error": "No praise items matched region '%s'" % region,
+                "received_praise_count": len(payload.get("praise", []) or [])
+                    if isinstance(payload.get("praise"), (list, tuple)) else 1,
+            }), 400
 
-    if not written:
-        return jsonify({"error": "No praise items matched a known country"}), 400
+        return send_file(
+            path,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        )
+    except Exception as e:
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
 
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w") as zf:
-        for path in written:
-            zf.write(path, os.path.basename(path))
-    zip_buffer.seek(0)
 
-    return send_file(
-        zip_buffer,
-        mimetype="application/zip",
-        as_attachment=True,
-        download_name="praise_decks.zip",
-    )
+@app.route("/generate-praise-deck/aunz", methods=["POST"])
+def praise_deck_aunz():
+    """Wall of Praise deck for Australia & New Zealand. Returns praise_aunz.pptx."""
+    return _run_praise_region("aunz", "praise_aunz.pptx")
+
+
+@app.route("/generate-praise-deck/america", methods=["POST"])
+def praise_deck_america():
+    """Wall of Praise deck for the USA. Returns praise_america.pptx."""
+    return _run_praise_region("america", "praise_america.pptx")
 
 
 @app.route("/health", methods=["GET"])
