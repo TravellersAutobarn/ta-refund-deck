@@ -46,14 +46,12 @@ SLIDE_H = Inches(7.5)
 # consecutive slides always differ. (bg, accent/banner, quote-mark colour)
 # ---------------------------------------------------------------------------
 PALETTES = [
-    {"bg": "FF6B6B", "band": "FFE66D", "ink": "2B2D42", "mark": "FFFFFF"},  # coral / sunshine
-    {"bg": "4ECDC4", "band": "FFD93D", "ink": "1A535C", "mark": "FFFFFF"},  # teal / gold
-    {"bg": "6A4C93", "band": "FFCA3A", "ink": "FFFFFF", "mark": "FFD6FF"},  # grape / amber
-    {"bg": "1982C4", "band": "8AC926", "ink": "FFFFFF", "mark": "CDEAFF"},  # ocean / lime
-    {"bg": "FF924C", "band": "FFCA3A", "ink": "3D2C2E", "mark": "FFFFFF"},  # mango / honey
-    {"bg": "06D6A0", "band": "FFD166", "ink": "073B4C", "mark": "FFFFFF"},  # mint / butter
-    {"bg": "EF476F", "band": "FFD166", "ink": "FFFFFF", "mark": "FFE5EC"},  # raspberry / butter
-    {"bg": "118AB2", "band": "06D6A0", "ink": "FFFFFF", "mark": "CFF5E7"},  # blue / emerald
+    {"bg": "3A506B", "band": "1C2541", "ink": "FFFFFF", "mark": "9DB4CC"},  # slate / navy
+    {"bg": "395B64", "band": "1E3A40", "ink": "FFFFFF", "mark": "A5C9CA"},  # teal slate
+    {"bg": "5C3A4D", "band": "33212C", "ink": "FFFFFF", "mark": "C7A3B5"},  # muted plum
+    {"bg": "44576D", "band": "29384A", "ink": "FFFFFF", "mark": "AEBED0"},  # steel blue
+    {"bg": "4A5043", "band": "2C3026", "ink": "FFFFFF", "mark": "BFC6B4"},  # olive slate
+    {"bg": "5A4A42", "band": "342A25", "ink": "FFFFFF", "mark": "C9B8AE"},  # taupe
 ]
 
 REGION_TITLES = {
@@ -250,7 +248,7 @@ def _build_deck(items, region, date_label):
         sr.text = date_label
         sr.font.size = Pt(24)
         sr.font.name = "Calibri"
-        sr.font.color.rgb = _rgb("FFD166")
+        sr.font.color.rgb = _rgb("9DB4CC")
 
     for idx, item in enumerate(items):
         palette = PALETTES[idx % len(PALETTES)]
