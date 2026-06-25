@@ -1,0 +1,58 @@
+{
+  "date_label": "Previous Month",
+  "deck_type": "branch_praise",
+  "us_deck": {
+    "region": "US",
+    "slide_title": "US Branch Recognition",
+    "slide_subtitle": "Top 3 happiest customers from the previous month who visited a branch for assistance",
+    "branch_recognition_line": "These branch teams stood out for speed, friendliness, and customer care.",
+    "top_3_highlights": [
+      {
+        "customer_label": "Customer 1",
+        "branch_name": "Branch Name Here",
+        "quote_or_summary": "Customer praised the branch team for fast service, clear communication, and a welcoming in-person experience.",
+        "themes": ["speed", "friendliness", "detail"]
+      },
+      {
+        "customer_label": "Customer 2",
+        "branch_name": "Branch Name Here",
+        "quote_or_summary": "Customer highlighted how helpful and professional the branch staff were throughout the visit.",
+        "themes": ["helpfulness", "professionalism"]
+      },
+      {
+        "customer_label": "Customer 3",
+        "branch_name": "Branch Name Here",
+        "quote_or_summary": "Customer described the branch visit as smooth, efficient, and handled with genuine care.",
+        "themes": ["efficiency", "care", "service"]
+      }
+    ],
+    "admin_message": "Thank you to our US branch teams for delivering standout in-person customer experiences last month."
+  },
+  "aunz_deck": {
+    "region": "AU_NZ",
+    "slide_title": "AU & NZ Branch Recognition",
+    "slide_subtitle": "Top 3 happiest customers from the previous month who visited a branch for assistance",
+    "branch_recognition_line": "These branch teams delivered thoughtful, friendly, and efficient support.",
+    "top_3_highlights": [
+      {
+        "customer_label": "Customer 1",
+        "branch_name": "Branch Name Here",
+        "quote_or_summary": "Customer praised the branch team for their patience, warmth, and clear attention to detail.",
+        "themes": ["friendliness", "detail", "care"]
+      },
+      {
+        "customer_label": "Customer 2",
+        "branch_name": "Branch Name Here",
+        "quote_or_summary": "Customer appreciated the speed of support and how easy the branch visit felt from start to finish.",
+        "themes": ["speed", "ease", "service"]
+      },
+      {
+        "customer_label": "Customer 3",
+        "branch_name": "Branch Name Here",
+        "quote_or_summary": "Customer said the branch staff made the process simple, supportive, and positive.",
+        "themes": ["support", "friendliness", "helpfulness"]
+      }
+    ],
+    "admin_message": "Thank you to our AU & NZ branch teams for representing the brand with excellence throughout the previous month."
+  }
+}
