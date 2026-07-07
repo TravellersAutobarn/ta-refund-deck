@@ -243,13 +243,13 @@ def calculate_stats(rows):
     au_stats = branch_stats(au_rows, AU_BRANCHES)
     nz_stats = branch_stats(nz_rows, NZ_BRANCHES)
 
-    # Equipment gap: biggest single "DOR-GW" claim per branch
+    # Equipment gap: biggest single "Camp Gear - Prep" claim per branch
     def equipment_gap(branch_list):
         gaps = []
         for b in branch_list:
-            dor_claims = [c for c in b["claims"] if "DOR" in c["category"].upper() or "GEAR" in c["category"].upper()]
-            if dor_claims:
-                top = max(dor_claims, key=lambda x: x["amount"])
+            gear_claims = [c for c in b["claims"] if "GEAR" in c["category"].upper()]
+            if gear_claims:
+                top = max(gear_claims, key=lambda x: x["amount"])
                 gaps.append({**top, "branch_code": b["code"], "branch_name": b["name"], "color": b["color"]})
         return gaps
 
