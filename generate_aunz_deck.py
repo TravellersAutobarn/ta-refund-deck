@@ -271,6 +271,7 @@ def attach_prior_month(stats, prior_stats, prior_label):
             for b in cur["branches"]:
                 b["prev_total"] = None
                 b["prev_count"] = None
+                b["prev_by_category"] = None
             continue
 
         prev = prior_stats[region]
@@ -285,6 +286,7 @@ def attach_prior_month(stats, prior_stats, prior_label):
             pb = prev_map.get(b["code"])
             b["prev_total"] = pb["total"] if pb else None
             b["prev_count"] = pb["count"] if pb else None
+            b["prev_by_category"] = pb["by_category"] if pb else None
     return stats
 
 
@@ -968,10 +970,15 @@ AU_BRANCHES.forEach(branch => {{
         fill:{{ color:WHITE }}, line:{{ color:WHITE }}
       }});
     }}
-    slide.addText(fmtAUD(catValues[ci]), {{
-      x:0.12, y: barY+0.35, w: sideW-0.2, h:0.17,
-      fontSize:8.5, bold:true, color:WHITE
-    }});
+    slide.addText(
+      fmtAUD(catValues[ci])
+        + ((branch.prev_by_category && PRIOR_SHORT)
+            ? '  ·  ' + PRIOR_SHORT + ': ' + fmtAUD(branch.prev_by_category[cat] || 0)
+            : ''),
+      {{
+        x:0.12, y: barY+0.35, w: sideW-0.2, h:0.17,
+        fontSize:8.5, bold:true, color:WHITE
+      }});
   }});
 
   // Sidebar narrative
