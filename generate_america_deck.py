@@ -7,10 +7,16 @@ Receives raw Google Sheets data (as JSON via stdin or file path arg),
 calculates all stats in Python, calls Claude API for narrative text only,
 then shells out to Node/PptxGenJS to build the final .pptx file.
 
+v2 changes:
+  - Branches sorted worst offender (highest refund total) to least
+  - Speaker notes (talking points) added to every slide via Claude
+  - Month-over-month comparison: expects rows for BOTH the report month
+    and the prior month; splits them using the Month column (K).
+    If prior-month rows are absent, comparison is skipped gracefully.
+
 Usage:
     echo '<json_data>' | python generate_america_deck.py
     python generate_america_deck.py --data data.json --output /path/to/output.pptx
-    python generate_america_deck.py --start-date 2026-05-01 --end-date 2026-05-15
 """
 
 import sys
@@ -66,6 +72,13 @@ def load_data(args):
     return rows
 
 
+def normalise_rows(rows):
+    """Convert dict rows (from Make) into plain indexed lists, once."""
+    if rows and isinstance(rows[0], dict):
+        rows = [list(r.values()) for r in rows]
+    return rows
+
+
 def parse_amount(val):
     if val is None or val == "":
         return 0.0
@@ -87,32 +100,59 @@ def parse_date(val):
     return None
 
 
-# ─── Calculations ─────────────────────────────────────────────────────────────
+# ─── Month splitting (for month-over-month comparison) ──────────────────────
 
-def filter_by_date(rows, start_date, end_date):
-    if not start_date and not end_date:
-        return rows
-    filtered = []
+def split_rows_by_month(rows):
+    """
+    Group rows by the Month column (K). The most recent month present is
+    the REPORT month; the calendar month immediately before it (if present)
+    is the PRIOR month used for comparison.
+
+    Returns: (report_rows, prior_rows, report_label, prior_label)
+    prior_rows may be an empty list and prior_label None if no prior data.
+    """
+    grouped = defaultdict(list)
     for row in rows:
-        d = parse_date(row[COL["date_entered"]])
+        d = parse_date(row[COL["month"]])
         if d is None:
             continue
-        if start_date and d < start_date:
-            continue
-        if end_date and d > end_date:
-            continue
-        filtered.append(row)
-    return filtered
+        grouped[(d.year, d.month)].append(row)
 
+    if not grouped:
+        return rows, [], None, None
+
+    report_key = max(grouped.keys())
+    ry, rm = report_key
+    if rm == 1:
+        prior_key = (ry - 1, 12)
+    else:
+        prior_key = (ry, rm - 1)
+
+    report_rows = grouped[report_key]
+    prior_rows  = grouped.get(prior_key, [])
+
+    report_label = date(report_key[0], report_key[1], 1).strftime("%B %Y")
+    prior_label  = date(prior_key[0], prior_key[1], 1).strftime("%B %Y") if prior_rows else None
+
+    return report_rows, prior_rows, report_label, prior_label
+
+
+# ─── Calculations ─────────────────────────────────────────────────────────────
 
 def is_us_branch(branch_code):
     return str(branch_code).strip().upper() in US_BRANCHES
 
 
-def calculate_stats(rows):
-    if rows and isinstance(rows[0], dict):
-        rows = [list(r.values()) for r in rows]
+def is_preventable(category):
+    c = str(category or "").upper()
+    return "DOR" in c or "GEAR" in c or "CAMP" in c
 
+
+def calculate_stats(rows):
+    """
+    Master stats calculation for US branches.
+    Branch list is sorted WORST OFFENDER FIRST (highest total to lowest).
+    """
     us_rows = [r for r in rows if is_us_branch(r[COL["pickup_branch"]])]
 
     totals  = defaultdict(float)
@@ -151,15 +191,8 @@ def calculate_stats(rows):
         branch_claims = sorted(claims.get(bc, []), key=lambda x: x["amount"], reverse=True)
         biggest_claim = branch_claims[0] if branch_claims else None
 
-        # Preventable = DOR-GW + Camp Gear claims
-        preventable_total = sum(
-            c["amount"] for c in branch_claims
-            if "DOR" in c["category"].upper() or "GEAR" in c["category"].upper() or "CAMP" in c["category"].upper()
-        )
-        preventable_count = sum(
-            1 for c in branch_claims
-            if "DOR" in c["category"].upper() or "GEAR" in c["category"].upper() or "CAMP" in c["category"].upper()
-        )
+        preventable_total = sum(c["amount"] for c in branch_claims if is_preventable(c["category"]))
+        preventable_count = sum(1 for c in branch_claims if is_preventable(c["category"]))
         preventable_pct = (preventable_total / branch_total * 100) if branch_total else 0
 
         branches.append({
@@ -178,17 +211,20 @@ def calculate_stats(rows):
             "preventable_pct":   round(preventable_pct, 1),
         })
 
+    # ── SORT: worst offender (highest total) first ──
+    branches.sort(key=lambda b: b["total"], reverse=True)
+
     category_totals = defaultdict(float)
     for row in us_rows:
         cat = str(row[COL["refund_category"]]).strip()
         category_totals[cat] += parse_amount(row[COL["amount"]])
 
-    # Equipment gap per branch
+    # Preventable spotlight: biggest preventable claim per branch
     equipment_gaps = []
     for b in branches:
-        dor_claims = [c for c in b["claims"] if "DOR" in c["category"].upper() or "GEAR" in c["category"].upper() or "CAMP" in c["category"].upper()]
-        if dor_claims:
-            top = max(dor_claims, key=lambda x: x["amount"])
+        prev_claims = [c for c in b["claims"] if is_preventable(c["category"])]
+        if prev_claims:
+            top = max(prev_claims, key=lambda x: x["amount"])
             equipment_gaps.append({**top, "branch_code": b["code"], "branch_name": b["name"], "color": b["color"]})
 
     total_preventable = sum(b["preventable_total"] for b in branches)
@@ -207,13 +243,46 @@ def calculate_stats(rows):
     }
 
 
+def attach_prior_month(stats, prior_stats, prior_label):
+    """
+    Attach prior-month comparison numbers onto the report stats.
+    If prior_stats is None, marks everything as having no comparison.
+    """
+    if prior_stats is None:
+        stats["prev"] = None
+        for b in stats["branches"]:
+            b["prev_total"] = None
+            b["prev_count"] = None
+            b["prev_by_category"] = None
+            b["prev_preventable_total"] = None
+        return stats
+
+    stats["prev"] = {
+        "label":                   prior_label,
+        "total":                   prior_stats["grand_total"],
+        "count":                   prior_stats["grand_count"],
+        "avg_claim":               prior_stats["avg_claim"],
+        "total_preventable":       prior_stats["total_preventable"],
+        "preventable_pct_overall": prior_stats["preventable_pct_overall"],
+    }
+    prev_map = {b["code"]: b for b in prior_stats["branches"]}
+    for b in stats["branches"]:
+        pb = prev_map.get(b["code"])
+        b["prev_total"] = pb["total"] if pb else None
+        b["prev_count"] = pb["count"] if pb else None
+        b["prev_by_category"] = pb["by_category"] if pb else None
+        b["prev_preventable_total"] = pb["preventable_total"] if pb else None
+    return stats
+
+
 # ─── Claude API ───────────────────────────────────────────────────────────────
 
-def get_claude_narratives(stats, date_label, api_key=None):
+def get_claude_narratives(stats, date_label, prior_label, api_key=None):
     client = anthropic.Anthropic(api_key=api_key or os.environ.get("ANTHROPIC_API_KEY"))
 
     stats_summary = {
         "period":    date_label,
+        "prior_period": prior_label,
         "total":     stats["grand_total"],
         "count":     stats["grand_count"],
         "avg_claim": stats["avg_claim"],
@@ -230,13 +299,29 @@ def get_claude_narratives(stats, date_label, api_key=None):
                 "preventable_total": b["preventable_total"],
                 "preventable_pct":   b["preventable_pct"],
                 "by_category":       b["by_category"],
+                "prev_month_total":  b["prev_total"],
+                "prev_month_count":  b["prev_count"],
+                "prev_month_preventable": b["prev_preventable_total"],
             }
             for b in stats["branches"]
         ],
     }
+    if stats.get("prev"):
+        stats_summary["prev_month"] = stats["prev"]
 
-    prompt = f"""You are writing concise insights for a refund awareness presentation for Travellers Autobarn America (US operations).
+    comparison_rule = (
+        "Prior-month numbers are included — weave the month-over-month change "
+        "(up, down, or flat, and by roughly how much) into insights and talking points. "
+        "Refunds going DOWN is good news; going UP needs attention."
+        if prior_label else
+        "No prior-month data is available — do not mention any month-over-month comparison."
+    )
+
+    prompt = f"""You are writing concise insights and presenter talking points for a refund awareness presentation for Travellers Autobarn America (US operations). The goal of the deck is to make branches aware of refunds and drive refund costs DOWN.
 All numbers below are pre-calculated — DO NOT recalculate or change any figures. All amounts are in USD.
+Branches are listed worst offender first (highest refund total to lowest).
+{comparison_rule}
+Talking points are spoken presenter notes: plain sentences, no markdown, no bullets, written as if said aloud to branch managers. Each branch talking point should end with one direct question or action to put to that branch.
 Return ONLY valid JSON with the exact keys listed. No markdown, no code fences.
 
 STATS:
@@ -256,12 +341,21 @@ Return JSON with these exact keys:
     "LAS": "Two sentences (max 30 words total) for the Las Vegas detail slide narrative.",
     "LAX": "Two sentences (max 30 words total) for the Los Angeles detail slide narrative.",
     "SFO": "Two sentences (max 30 words total) for the San Francisco detail slide narrative."
+  }},
+  "us_cover_talking_points": "Three to four spoken sentences (max 80 words) introducing the US refund picture, including the month-over-month story if prior data exists.",
+  "us_branch_overview_talking_points": "Three to four spoken sentences (max 80 words) walking through the branch comparison, naming the worst branch and any branch that improved or worsened most versus the prior month.",
+  "us_where_money_went_talking_points": "Three to four spoken sentences (max 80 words) telling the category story and what it means operationally.",
+  "us_equipment_gap_talking_points": "Two to three spoken sentences (max 60 words) on the preventable refunds and what branches should check.",
+  "us_branch_talking_points": {{
+    "LAS": "Two to three spoken sentences (max 60 words) for the Las Vegas detail slide, including month-over-month direction if available, ending with one question or action for the branch.",
+    "LAX": "Two to three spoken sentences (max 60 words) for the Los Angeles detail slide, same requirements.",
+    "SFO": "Two to three spoken sentences (max 60 words) for the San Francisco detail slide, same requirements."
   }}
 }}"""
 
     message = client.messages.create(
         model="claude-opus-4-5",
-        max_tokens=900,
+        max_tokens=2000,
         messages=[{"role": "user", "content": prompt}]
     )
 
@@ -278,6 +372,9 @@ Return JSON with these exact keys:
 def build_pptx_script(stats, narratives, date_label, output_path):
     branches_js   = json.dumps(stats["branches"])
     narratives_js = json.dumps(narratives)
+    prev_js       = json.dumps(stats.get("prev"))
+    prior_label   = stats["prev"]["label"] if stats.get("prev") else None
+    prior_short   = prior_label.split(" ")[0] if prior_label else ""
 
     script = f"""
 'use strict';
@@ -293,6 +390,8 @@ const US_BRANCHES     = {branches_js};
 const US_EQUIP_GAPS   = {json.dumps(stats["equipment_gaps"])};
 const PREVENTABLE_TOT = {stats["total_preventable"]};
 const PREVENTABLE_PCT = {stats["preventable_pct_overall"]};
+const US_PREV         = {prev_js};
+const PRIOR_SHORT     = {json.dumps(prior_short)};
 const N               = {narratives_js};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -306,8 +405,27 @@ const LIGHT_GREY = 'F8FAFC';
 const MID_GREY   = '64748B';
 const DARK_GREY  = '1E293B';
 const RED        = 'DC2626';
+const GOOD_GREEN = '16A34A';
 
 const makeShadow = () => ({{ type: 'outer', blur: 8, offset: 2, angle: 135, color: '000000', opacity: 0.12 }});
+
+// Month-over-month delta line. Refunds DOWN = green (good), UP = red (bad).
+// kind: 'money' or 'count'. Returns null when no prior data.
+const deltaLine = (cur, prev, kind) => {{
+  if (prev === null || prev === undefined || !PRIOR_SHORT) return null;
+  const diff = cur - prev;
+  if (Math.abs(diff) < 0.005) {{
+    return {{ text: 'level with ' + PRIOR_SHORT, color: MID_GREY }};
+  }}
+  const up = diff > 0;
+  const arrow = up ? '\\u25B2' : '\\u25BC';
+  const color = up ? RED : GOOD_GREEN;
+  const size  = kind === 'count'
+    ? Math.abs(Math.round(diff)) + (Math.abs(Math.round(diff)) === 1 ? ' claim' : ' claims')
+    : fmtUSD(Math.abs(diff));
+  const pct = prev > 0 ? ' (' + (up ? '+' : '-') + Math.abs(diff / prev * 100).toFixed(0) + '%)' : '';
+  return {{ text: arrow + ' ' + size + pct + ' vs ' + PRIOR_SHORT, color }};
+}};
 
 // ─── Presentation setup ───────────────────────────────────────────────────
 const pres = new pptxgen();
@@ -340,11 +458,14 @@ pres.title  = `Travellers Autobarn — America Refund Awareness ${{DATE_LABEL}}`
     fontSize:13, color:'64748B', align:'left'
   }});
 
-  // Big stat callouts
+  // Big stat callouts (with month-over-month deltas when available)
   const stats = [
-    {{ label:'Total Refunds',     value: fmtUSD(US_TOTAL) }},
-    {{ label:'Total Claims',      value: US_COUNT.toString() }},
-    {{ label:'Average Claim',     value: fmtUSD(US_AVG) }},
+    {{ label:'Total Refunds', value: fmtUSD(US_TOTAL),
+       delta: US_PREV ? deltaLine(US_TOTAL, US_PREV.total, 'money') : null }},
+    {{ label:'Total Claims',  value: US_COUNT.toString(),
+       delta: US_PREV ? deltaLine(US_COUNT, US_PREV.count, 'count') : null }},
+    {{ label:'Average Claim', value: fmtUSD(US_AVG),
+       delta: US_PREV ? deltaLine(US_AVG, US_PREV.avg_claim, 'money') : null }},
   ];
   stats.forEach((s, i) => {{
     const x = 0.5 + i * 3.2;
@@ -354,13 +475,19 @@ pres.title  = `Travellers Autobarn — America Refund Awareness ${{DATE_LABEL}}`
       shadow: makeShadow()
     }});
     slide.addText(s.value, {{
-      x, y:2.38, w:2.9, h:0.55,
-      fontSize:28, bold:true, color:WHITE, align:'center', margin:0
+      x, y:2.40, w:2.9, h:0.45,
+      fontSize:26, bold:true, color:WHITE, align:'center', margin:0
     }});
     slide.addText(s.label, {{
-      x, y:2.88, w:2.9, h:0.35,
-      fontSize:10, color:'64748B', align:'center', margin:0
+      x, y:2.82, w:2.9, h:0.24,
+      fontSize:9, color:'64748B', align:'center', margin:0
     }});
+    if (s.delta) {{
+      slide.addText(s.delta.text, {{
+        x, y:3.06, w:2.9, h:0.28,
+        fontSize:9, bold:true, color: s.delta.color, align:'center', margin:0
+      }});
+    }}
   }});
 
   // Preventable callout (US-specific)
@@ -368,10 +495,15 @@ pres.title  = `Travellers Autobarn — America Refund Awareness ${{DATE_LABEL}}`
     x:0.5, y:3.48, w:5.7, h:0.55,
     fill:{{ color:'450A0A' }}, line:{{ color: RED, pt:1 }}
   }});
-  slide.addText(`Preventable refunds: ${{fmtUSD(PREVENTABLE_TOT)}} (${{fmtPct(PREVENTABLE_PCT)}} of total)`, {{
-    x:0.6, y:3.52, w:5.5, h:0.45,
-    fontSize:11, bold:true, color:'FCA5A5', align:'left', wrap:true
-  }});
+  const prevDelta = (US_PREV && US_PREV.total_preventable !== null && US_PREV.total_preventable !== undefined)
+    ? deltaLine(PREVENTABLE_TOT, US_PREV.total_preventable, 'money') : null;
+  slide.addText(
+    `Preventable refunds: ${{fmtUSD(PREVENTABLE_TOT)}} (${{fmtPct(PREVENTABLE_PCT)}} of total)`
+      + (prevDelta ? '  ·  ' + prevDelta.text : ''),
+    {{
+      x:0.6, y:3.52, w:5.5, h:0.45,
+      fontSize:11, bold:true, color:'FCA5A5', align:'left', wrap:true
+    }});
 
   // Branch dots
   slide.addText('Branches covered:', {{
@@ -413,10 +545,12 @@ pres.title  = `Travellers Autobarn — America Refund Awareness ${{DATE_LABEL}}`
     x:0.5, y:5.43, w:9, h:0.2,
     fontSize:8, color:'334155', align:'center'
   }});
+
+  if (N.us_cover_talking_points) slide.addNotes(N.us_cover_talking_points);
 }})();
 
 // ════════════════════════════════════════════════════════════════════════════
-// SLIDE 2 — Refunds by US Branch (3 cards)
+// SLIDE 2 — Refunds by US Branch (3 cards, worst offender first)
 // ════════════════════════════════════════════════════════════════════════════
 (function() {{
   const slide = pres.addSlide();
@@ -427,7 +561,7 @@ pres.title  = `Travellers Autobarn — America Refund Awareness ${{DATE_LABEL}}`
     x:0.4, y:0.15, w:9, h:0.4,
     fontSize:20, bold:true, color: NAVY, align:'left'
   }});
-  slide.addText(`America — ${{DATE_LABEL}}`, {{
+  slide.addText(`America — ${{DATE_LABEL}} — worst to best`, {{
     x:0.4, y:0.52, w:9, h:0.3,
     fontSize:11, color: MID_GREY, italic:true
   }});
@@ -438,6 +572,7 @@ pres.title  = `Travellers Autobarn — America Refund Awareness ${{DATE_LABEL}}`
   US_BRANCHES.forEach((b, i) => {{
     const x   = startX + i * (cW + gap);
     const ins = N.us_branch_cards[b.code] || '';
+    const d   = deltaLine(b.total, b.prev_total, 'money');
 
     slide.addShape(pres.shapes.RECTANGLE, {{
       x, y:startY, w:cW, h:cH,
@@ -502,12 +637,22 @@ pres.title  = `Travellers Autobarn — America Refund Awareness ${{DATE_LABEL}}`
       }});
     }});
 
+    // Month-over-month delta line
+    if (d) {{
+      slide.addText(d.text, {{
+        x: x+0.15, y: startY+3.02, w: cW-0.25, h:0.15,
+        fontSize:8, bold:true, color: d.color, margin:0
+      }});
+    }}
+
     // Italic insight
     slide.addText(ins, {{
       x: x+0.12, y: startY+cH-0.42, w: cW-0.22, h:0.36,
       fontSize:8.5, color: MID_GREY, italic:true, wrap:true, margin:0
     }});
   }});
+
+  if (N.us_branch_overview_talking_points) slide.addNotes(N.us_branch_overview_talking_points);
 }})();
 
 // SLIDE 3 — Where the Money Went (US)
@@ -618,6 +763,8 @@ pres.title  = `Travellers Autobarn — America Refund Awareness ${{DATE_LABEL}}`
     x:0.55, y:4.6, w:9.0, h:0.65,
     fontSize:11, color:DARK_GREY, italic:true, wrap:true
   }});
+
+  if (N.us_where_money_went_talking_points) slide.addNotes(N.us_where_money_went_talking_points);
 }})();
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -716,10 +863,12 @@ pres.title  = `Travellers Autobarn — America Refund Awareness ${{DATE_LABEL}}`
     x:0.5, y:4.63, w:9.1, h:0.62,
     fontSize:11, color:WHITE, italic:true, wrap:true
   }});
+
+  if (N.us_equipment_gap_talking_points) slide.addNotes(N.us_equipment_gap_talking_points);
 }})();
 
 // ════════════════════════════════════════════════════════════════════════════
-// SLIDES 5–7 — US Branch Detail (LAS, LAX, SFO)
+// SLIDES 5–7 — US Branch Detail (worst offender first)
 // ════════════════════════════════════════════════════════════════════════════
 US_BRANCHES.forEach(branch => {{
   const slide = pres.addSlide();
@@ -753,22 +902,31 @@ US_BRANCHES.forEach(branch => {{
     fontSize:26, bold:true, color:WHITE
   }});
   slide.addText(`${{branch.count}} Claim${{branch.count !== 1 ? 's' : ''}}`, {{
-    x:0.1, y:2.15, w:sideW-0.15, h:0.3,
-    fontSize:13, color:'FFFFFF'
+    x:0.1, y:2.15, w:sideW-0.15, h:0.24,
+    fontSize:12, color:'FFFFFF'
   }});
+
+  // Month-over-month delta (white text on branch colour)
+  const bd = deltaLine(branch.total, branch.prev_total, 'money');
+  if (bd) {{
+    slide.addText(bd.text, {{
+      x:0.1, y:2.40, w:sideW-0.15, h:0.16,
+      fontSize:8, bold:true, color:'FFFFFF'
+    }});
+  }}
 
   // Preventable sub-stat in sidebar
   slide.addText(`${{fmtUSD(branch.preventable_total)}} preventable`, {{
-    x:0.1, y:2.48, w:sideW-0.15, h:0.22,
+    x:0.1, y:2.58, w:sideW-0.15, h:0.2,
     fontSize:9, color:'FCA5A5'
   }});
 
   slide.addShape(pres.shapes.LINE, {{
-    x:0.15, y:2.78, w:sideW-0.3, h:0,
+    x:0.15, y:2.80, w:sideW-0.3, h:0,
     line:{{ color:'FFFFFF', pt:1, transparency: 50 }}
   }});
 
-  // Category bars
+  // Category bars (with prior-month figure when available)
   const catLabels = Object.keys(branch.by_category);
   const catValues = catLabels.map(k => branch.by_category[k] || 0);
   const maxCatVal = Math.max(...catValues, 1);
@@ -791,10 +949,15 @@ US_BRANCHES.forEach(branch => {{
         fill:{{ color:WHITE }}, line:{{ color:WHITE }}
       }});
     }}
-    slide.addText(fmtUSD(catValues[ci]), {{
-      x:0.12, y: barY+0.35, w: sideW-0.2, h:0.17,
-      fontSize:8, bold:true, color:WHITE
-    }});
+    slide.addText(
+      fmtUSD(catValues[ci])
+        + ((branch.prev_by_category && PRIOR_SHORT)
+            ? '  ·  ' + PRIOR_SHORT + ': ' + fmtUSD(branch.prev_by_category[cat] || 0)
+            : ''),
+      {{
+        x:0.12, y: barY+0.35, w: sideW-0.2, h:0.17,
+        fontSize:8, bold:true, color:WHITE
+      }});
   }});
 
   // Sidebar narrative
@@ -827,7 +990,7 @@ US_BRANCHES.forEach(branch => {{
 
   displayClaims.forEach((claim, ci) => {{
     const cy = claimStartY + ci * (claimH + 0.08);
-    const isPreventable = claim.category && (
+    const isPrev = claim.category && (
       claim.category.toUpperCase().includes('DOR') ||
       claim.category.toUpperCase().includes('GEAR') ||
       claim.category.toUpperCase().includes('CAMP')
@@ -835,8 +998,8 @@ US_BRANCHES.forEach(branch => {{
 
     slide.addShape(pres.shapes.RECTANGLE, {{
       x: rightX, y: cy, w: rightW, h: claimH,
-      fill:{{ color: isPreventable ? 'FEF2F2' : LIGHT_GREY }},
-      line:{{ color: isPreventable ? 'FECACA' : 'E2E8F0', pt:0.75 }}
+      fill:{{ color: isPrev ? 'FEF2F2' : LIGHT_GREY }},
+      line:{{ color: isPrev ? 'FECACA' : 'E2E8F0', pt:0.75 }}
     }});
     slide.addShape(pres.shapes.RECTANGLE, {{
       x: rightX, y: cy, w:0.07, h: claimH,
@@ -854,7 +1017,7 @@ US_BRANCHES.forEach(branch => {{
     }});
     slide.addText(fmtUSD(claim.amount), {{
       x: rightX + rightW - 1.3, y: cy+0.08, w:1.25, h:0.28,
-      fontSize:16, bold:true, color: isPreventable ? RED : DARK_GREY, align:'right', margin:0
+      fontSize:16, bold:true, color: isPrev ? RED : DARK_GREY, align:'right', margin:0
     }});
 
     const nameLine = `${{claim.last_name || ''}}${{claim.rego ? ' · ' + claim.rego : ''}}${{claim.res_num ? ' · Res #' + claim.res_num : ''}}`;
@@ -876,6 +1039,10 @@ US_BRANCHES.forEach(branch => {{
       fontSize:9, color: MID_GREY, italic:true
     }});
   }}
+
+  // Presenter talking points for this branch
+  const tp = (N.us_branch_talking_points || {{}})[branch.code];
+  if (tp) slide.addNotes(tp);
 }});
 
 // ─── Write file ──────────────────────────────────────────────────────────────
@@ -893,34 +1060,34 @@ def main():
     parser = argparse.ArgumentParser(description="Generate America Refund Awareness PPTX")
     parser.add_argument("--data",        help="Path to JSON data file (else reads stdin)")
     parser.add_argument("--output",      default="america_refund_report.pptx")
-    parser.add_argument("--start-date",  help="Filter start date YYYY-MM-DD")
-    parser.add_argument("--end-date",    help="Filter end date YYYY-MM-DD")
-    parser.add_argument("--date-label",  help="Human-readable date range e.g. '1–15 June 2026'")
+    parser.add_argument("--start-date",  help="(unused, kept for compatibility)")
+    parser.add_argument("--end-date",    help="(unused, kept for compatibility)")
+    parser.add_argument("--date-label",  help="Human-readable date label e.g. 'June 2026' (auto-detected from Month column if omitted)")
     parser.add_argument("--api-key",     help="Anthropic API key")
     parser.add_argument("--skip-claude", action="store_true")
     args = parser.parse_args()
 
     print("Loading data...", file=sys.stderr)
     rows = load_data(args)
+    rows = normalise_rows(rows)
     print(f"  Loaded {len(rows)} rows", file=sys.stderr)
 
-    start_date = parse_date(args.start_date) if args.start_date else None
-    end_date   = parse_date(args.end_date)   if args.end_date   else None
-    if start_date or end_date:
-        rows = filter_by_date(rows, start_date, end_date)
-        print(f"  After date filter: {len(rows)} rows", file=sys.stderr)
+    # Split into report month and prior month using the Month column (K)
+    report_rows, prior_rows, report_label, prior_label = split_rows_by_month(rows)
+    print(f"  Report month: {report_label} ({len(report_rows)} rows)", file=sys.stderr)
+    if prior_label:
+        print(f"  Prior month:  {prior_label} ({len(prior_rows)} rows)", file=sys.stderr)
+    else:
+        print("  Prior month:  no data — comparison will be skipped", file=sys.stderr)
 
     print("Calculating statistics...", file=sys.stderr)
-    stats = calculate_stats(rows)
+    stats = calculate_stats(report_rows)
+    prior_stats = calculate_stats(prior_rows) if prior_rows else None
+    stats = attach_prior_month(stats, prior_stats, prior_label)
     print(f"  US: {stats['grand_count']} claims = ${stats['grand_total']}", file=sys.stderr)
     print(f"  Preventable: ${stats['total_preventable']} ({stats['preventable_pct_overall']}%)", file=sys.stderr)
 
-    date_label = args.date_label
-    if not date_label:
-        if start_date and end_date:
-            date_label = f"{start_date.strftime('%d %b')}–{end_date.strftime('%d %b %Y')}"
-        else:
-            date_label = datetime.now().strftime("%B %Y")
+    date_label = args.date_label or report_label or datetime.now().strftime("%B %Y")
 
     if args.skip_claude:
         print("Skipping Claude API...", file=sys.stderr)
@@ -930,10 +1097,15 @@ def main():
             "us_where_money_went":"Category breakdown shows key refund drivers across US branches.",
             "us_equipment_gap":   "Preventable refunds flagged for review across US locations.",
             "us_branch_detail":   {bc: f"Detail view for {US_BRANCHES[bc]['name']}." for bc in US_BRANCHES},
+            "us_cover_talking_points": "Placeholder talking points for the cover slide.",
+            "us_branch_overview_talking_points": "Placeholder talking points for the branch overview slide.",
+            "us_where_money_went_talking_points": "Placeholder talking points for the category slide.",
+            "us_equipment_gap_talking_points": "Placeholder talking points for the preventable slide.",
+            "us_branch_talking_points": {bc: f"Placeholder talking points for {US_BRANCHES[bc]['name']}." for bc in US_BRANCHES},
         }
     else:
         print("Calling Claude API for narrative text...", file=sys.stderr)
-        narratives = get_claude_narratives(stats, date_label, api_key=args.api_key)
+        narratives = get_claude_narratives(stats, date_label, prior_label, api_key=args.api_key)
         print("  Narratives received.", file=sys.stderr)
 
     print("Building PptxGenJS script...", file=sys.stderr)
