@@ -159,6 +159,9 @@ def calculate_stats(rows):
         bc  = str(row[COL["pickup_branch"]]).strip().upper()
         amt = parse_amount(row[COL["amount"]])
         cat = str(row[COL["refund_category"]]).strip()
+        # NZ sheet: the refund reason is usually typed into Notes (col 13),
+        # with Detailed Reason (col 12) left blank. Prefer whichever has text.
+        detail_text = str(row[COL["details"]] or "").strip() or str(row[COL["notes"]] or "").strip()
         totals[bc]  += amt
         counts[bc]  += 1
         by_cat[bc][cat] += amt
@@ -169,7 +172,7 @@ def calculate_stats(rows):
             "fleet":     row[COL["fleet"]],
             "amount":    amt,
             "category":  cat,
-            "details":   row[COL["details"]],
+            "details":   detail_text,
             "notes":     row[COL["notes"]],
             "date":      row[COL["date_entered"]],
         })
@@ -535,11 +538,11 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
       fontSize:14, color: MID_GREY, margin:0
     }});
     slide.addShape(pres.shapes.RECTANGLE, {{
-      x: x+cW-1.35, y: startY+1.44, w:1.2, h:0.32,
+      x: x+cW-1.35, y: startY+1.10, w:1.2, h:0.32,
       fill:{{ color: b.color }}, line:{{ color: b.color }}
     }});
     slide.addText(fmtPct(b.pct_of_total), {{
-      x: x+cW-1.35, y: startY+1.44, w:1.2, h:0.32,
+      x: x+cW-1.35, y: startY+1.10, w:1.2, h:0.32,
       fontSize:13, bold:true, color: WHITE, align:'center', margin:0
     }});
     const cats = Object.entries(b.by_category).filter(([,v]) => v > 0);
@@ -551,11 +554,11 @@ pres.title  = `Travellers Autobarn — NZ Refund Awareness ${{DATE_LABEL}}`;
         fontSize:9, color: MID_GREY, margin:0
       }});
     }});
-    // Month-over-month delta (right side of card)
+    // Month-over-month delta (beside claim count, clear of category lines)
     if (d) {{
       slide.addText(d.text, {{
-        x: x+cW-1.95, y: startY+1.82, w:1.8, h:0.2,
-        fontSize:8.5, bold:true, color: d.color, align:'right', margin:0
+        x: x+2.05, y: startY+1.48, w:2.3, h:0.24,
+        fontSize:9, bold:true, color: d.color, align:'right', margin:0
       }});
     }}
     slide.addText(ins, {{
